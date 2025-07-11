@@ -1,0 +1,78 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🚀 Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "env": {
+                "GO_ENV": "development"
+            },
+            "args": [],
+            "showLog": true,
+            "trace": "verbose",
+            "logOutput": "rpc"
+        },
+        {
+            "name": "🔧 Debug Mode",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "GO_ENV": "debug",
+                "DEBUG_MODE": "true"
+            },
+            "args": [],
+            "showLog": true,
+            "console": "integratedTerminal",
+            "trace": "verbose"
+        },
+        {
+            "name": "🧪 Test Mode",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "GO_ENV": "test",
+                "MOCK_MODE": "true"
+            },
+            "args": [],
+            "showLog": true,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "📦 Build and Run",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "${workspaceFolder}/bin/${workspaceFolderBasename}",
+            "preLaunchTask": "go: build",
+            "env": {
+                "GO_ENV": "production"
+            },
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "🧩 Run Current File",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${file}",
+            "env": {
+                "GO_ENV": "development"
+            },
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "📄 Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": 0
+        }
+    ]
+}

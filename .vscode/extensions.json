@@ -1,0 +1,9 @@
+{
+	"recommendations": [
+		"golang.go",
+		"ms-vscode.vscode-json",
+		"streetsidesoftware.code-spell-checker",
+		"formulahendry.code-runner",
+		"aaron-bond.better-comments"
+	]
+}

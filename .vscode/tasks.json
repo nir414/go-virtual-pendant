@@ -1,0 +1,95 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "🏗️ Go Build",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"build",
+				"-v",
+				"."
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			},
+			"problemMatcher": "$go"
+		},
+		{
+			"label": "🚀 Go Run",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"run",
+				"."
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": "$go"
+		},
+		{
+			"label": "🧪 Go Test",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"test",
+				"-v",
+				"./..."
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": "$go"
+		},
+		{
+			"label": "🧹 Go Clean",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"clean"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "📦 Go Mod Tidy",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"mod",
+				"tidy"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "shared"
+			}
+		}
+	]
+}

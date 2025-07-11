@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Virtual Pendant - 로봇 제어</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Virtual Pendant - 로봇 제어 인터페이스</h1>
+        
+        <div class="mode-selector">
+            <h2>🎮 Jog Control</h2>
+            <div style="margin: 15px 0; padding: 15px; background: #babac9; border-radius: 8px;">
+                <button type="button" class="mode-btn" id="btn-computer" onclick="setJogModeButton('computer')">Computer</button>
+                <button type="button" class="mode-btn" id="btn-world" onclick="setJogModeButton('world')">World</button>
+                <button type="button" class="mode-btn" id="btn-tool" onclick="setJogModeButton('tool')">Tool</button>
+                <button type="button" class="mode-btn active" id="btn-joint" onclick="setJogModeButton('joint')">Joint</button>
+                <button type="button" class="mode-btn" id="btn-free" onclick="setJogModeButton('free')">Free</button>
+            </div>
+        </div>
+
+        <h2>🎯 축 선택 및 제어</h2>
+        <div class="axis-selector" id="axis-control">
+            <div style="margin-bottom: 15px;">
+                <label for="axisSelect">제어할 축 선택:</label>
+                <select name="axisSelect" size="4" id="axisSelect" onchange="jogListChanged()" style="width:200px; padding:5px; margin-left:10px;">
+                    <option value="joint1">Joint 1</option>
+                    <option value="joint2">Joint 2</option>
+                    <option value="joint3">Joint 3</option>
+                    <option value="joint4">Joint 4</option>
+                    <option value="joint5">Joint 5</option>
+                    <option value="joint6">Joint 6</option>
+                </select>
+            </div>
+            
+            <div class="jog-controls" style="text-align: center;">
+                <button class="jog-btn neg-btn" onclick="sendSelectedAxisJog('negative')" style="font-size: 18px; padding: 15px 30px;">- (감소)</button>
+                <span id="selectedAxis" style="margin: 0 20px; font-weight: bold; font-size: 16px;">Joint 1</span>
+                <button class="jog-btn" onclick="sendSelectedAxisJog('positive')" style="font-size: 18px; padding: 15px 30px;">+ (증가)</button>
+            </div>
+        </div>
+
+        <div class="step-control">
+            <label>스텝 크기: </label>
+            <input type="number" id="stepSize" value="1.0" step="0.1" min="0.1" max="10">
+            <span>° (조인트) / mm (카르테시안)</span>
+        </div>
+
+        <div class="speed-control">
+            <h3>⚡ Jog Speed Control</h3>
+            <div class="speed-input">
+                <label>Jog Speed:</label>
+                <input type="number" id="jogSpeed" value="10" min="1" max="100">
+                <span>%</span>
+                <button onclick="setJogSpeed()">Set</button>
+            </div>
+            <div class="speed-buttons">
+                <button class="speed-btn" onclick="setJogSpeedValue(1)">1%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(10)">10%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(20)">20%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(40)">40%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(60)">60%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(80)">80%</button>
+                <button class="speed-btn" onclick="setJogSpeedValue(100)">100%</button>
+            </div>
+        </div>
+
+        <div class="status" id="status">대기 중...</div>
+
+        <h2>📊 현재 상태</h2>
+        <div class="status-display" id="realtime-status">
+            <div class="status-grid">
+                <div>
+                    <strong>🎮 조깅 모드:</strong> <span id="current-jog-mode">로딩중...</span><br>
+                    <strong>🎯 선택된 축:</strong> <span id="current-axis">로딩중...</span><br>
+                    <strong>⚡ 전원 상태:</strong> <span id="power-state">로딩중...</span>
+                </div>
+                <div>
+                    <strong>🔧 축 개수:</strong> <span id="axis-count">로딩중...</span><br>
+                    <strong>🎚️ JOG 허용:</strong> <span id="allow-jog">로딩중...</span><br>
+                    <strong>⚠️ 오류:</strong> <span id="error-desc">없음</span>
+                </div>
+            </div>
+        </div>
+
+        <h2>📊 현재 위치</h2>
+        <button class="refresh-btn" onclick="updatePosition()">🔄 위치 새로고침</button>
+        <div class="coords" id="coordinates">위치 정보를 로딩 중...</div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

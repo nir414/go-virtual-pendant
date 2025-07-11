@@ -1,0 +1,43 @@
+{
+    // === Go 언어 기본 설정 ===
+    "go.useLanguageServer": true,
+    "go.formatTool": "gofmt",
+    "go.lintTool": "staticcheck",
+    // === 저장 시 자동 동작 ===
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    // === 기본 에디터 설정 ===
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": true,
+    "editor.trimAutoWhitespace": true,
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 120,
+    // === 파일 관리 ===
+    "files.associations": {
+        "*.go": "go"
+    },
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 2000,
+    "files.exclude": {
+        "**/bin": true,
+        "**/vendor": true,
+        "**/.git": true
+    },
+    // === 초보자 도움 기능 ===
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": false,
+        "strings": true
+    },
+    "editor.suggestOnTriggerCharacters": true,
+    "editor.acceptSuggestionOnEnter": "on",
+    "go.useCodeSnippetsOnFunctionSuggest": true,
+    // === 간단한 테스트 설정 ===
+    "go.testFlags": [
+        "-v"
+    ],
+    "go.testTimeout": "30s"
+}
