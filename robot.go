@@ -6,9 +6,52 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
+
+// 로깅 레벨 설정
+type LogLevel int
+
+const (
+	LogLevelInfo LogLevel = iota
+	LogLevelDebug
+	LogLevelVerbose
+)
+
+var currentLogLevel LogLevel
+
+func init() {
+	// 환경변수로 로그 레벨 설정
+	switch os.Getenv("LOG_LEVEL") {
+	case "DEBUG":
+		currentLogLevel = LogLevelDebug
+	case "VERBOSE":
+		currentLogLevel = LogLevelVerbose
+	default:
+		currentLogLevel = LogLevelInfo
+	}
+}
+
+// 로깅 함수들
+func logInfo(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelInfo {
+		log.Printf("ℹ️  "+format, args...)
+	}
+}
+
+func logDebug(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelDebug {
+		log.Printf("🔍 "+format, args...)
+	}
+}
+
+func logVerbose(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelVerbose {
+		log.Printf("🔧 "+format, args...)
+	}
+}
 
 // HTTP 클라이언트 재사용으로 연결 풀링 최적화
 var httpClient = &http.Client{
@@ -20,11 +63,89 @@ var httpClient = &http.Client{
 	},
 }
 
+// 로봇 명령 PID 상수
+const (
+	JointModePID     = "623"
+	CartesianModePID = "624"
+	PID_JOG_ENABLE   = "215" // JOG 활성화 PID
+	PID_JOG_MODE     = "621" // JOG 모드 설정 PID
+	PID_AXIS_SELECT  = "622" // 축 선택 PID
+	PID_ROBOT_SELECT = "620" // 로봇 선택 PID
+)
+
+// 로봇 통신 URL 상수
+const (
+	ROBOT_BASE_URL    = "http://192.168.0.1"
+	ROBOT_DATA_URL    = ROBOT_BASE_URL + "/ROMDISK/web/Opr/jog/jogrefresh.asp"
+	ROBOT_COMMAND_URL = ROBOT_BASE_URL + "/wrtpdb"
+	ROBOT_REDIRECT    = "/ROMDISK/web/dbfunctions.asp"
+)
+
+// AxisConfig 축 설정 구조체
+type AxisConfig struct {
+	PID  string
+	Axis int
+}
+
+// AxisInfo 축 정보 구조체 (이름과 표시명 포함)
+type AxisInfo struct {
+	Config      AxisConfig
+	DisplayName string
+	Aliases     []string // 별칭들 (j1, joint1 등)
+}
+
+// generateAxisMap 축 맵을 동적으로 생성하는 함수
+func generateAxisMap(pidBase string, axisInfos []AxisInfo) map[string]AxisConfig {
+	axisMap := make(map[string]AxisConfig)
+	for i, info := range axisInfos {
+		config := AxisConfig{PID: pidBase, Axis: i + 1}
+		for _, alias := range info.Aliases {
+			axisMap[alias] = config
+		}
+	}
+	return axisMap
+}
+
+// 축 정보 정의
+var (
+	jointAxisInfos = []AxisInfo{
+		{DisplayName: "J1", Aliases: []string{"joint1", "j1"}},
+		{DisplayName: "J2", Aliases: []string{"joint2", "j2"}},
+		{DisplayName: "J3", Aliases: []string{"joint3", "j3"}},
+		{DisplayName: "J4", Aliases: []string{"joint4", "j4"}},
+		{DisplayName: "J5", Aliases: []string{"joint5", "j5"}},
+		{DisplayName: "J6", Aliases: []string{"joint6", "j6"}},
+	}
+
+	cartesianAxisInfos = []AxisInfo{
+		{DisplayName: "X", Aliases: []string{"x"}},
+		{DisplayName: "Y", Aliases: []string{"y"}},
+		{DisplayName: "Z", Aliases: []string{"z"}},
+		{DisplayName: "Rx", Aliases: []string{"rx"}},
+		{DisplayName: "Ry", Aliases: []string{"ry"}},
+		{DisplayName: "Rz", Aliases: []string{"rz"}},
+	}
+
+	// 동적으로 생성된 축 맵들
+	jointAxisMap     = generateAxisMap(JointModePID, jointAxisInfos)
+	cartesianAxisMap = generateAxisMap(CartesianModePID, cartesianAxisInfos)
+)
+
+// buildAxisCommand 축별 명령 생성 헬퍼 함수
+func buildAxisCommand(axisMap map[string]AxisConfig, axis string, step float64) (string, string, error) {
+	if config, exists := axisMap[axis]; exists {
+		pidCommand := fmt.Sprintf("%s,%d,0,0", config.PID, config.Axis)
+		pvalCommand := fmt.Sprintf("%.3f", step)
+		return pidCommand, pvalCommand, nil
+	}
+	return "", "", fmt.Errorf("지원하지 않는 축: %s", axis)
+}
+
 // buildJogCommand converts JOG command to robot protocol
 func buildJogCommand(cmd JogCommand) (url.Values, error) {
 	form := url.Values{}
 	form.Set("nPID", "1")
-	form.Set("Redirect", "/ROMDISK/web/dbfunctions.asp")
+	form.Set("Redirect", ROBOT_REDIRECT)
 
 	// 방향에 따른 부호 결정
 	direction := 1.0
@@ -34,36 +155,18 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 
 	step := cmd.Step * direction
 
-	var pidCommand string
-	var pvalCommand string
+	var pidCommand, pvalCommand string
+	var err error
 
 	switch cmd.Mode {
 	case "joint":
-		// 조인트 모드 JOG 명령
-		jointMap := map[string]string{
-			"joint1": "623,1,0,0", "j1": "623,1,0,0",
-			"joint2": "623,2,0,0", "j2": "623,2,0,0",
-			"joint3": "623,3,0,0", "j3": "623,3,0,0",
-			"joint4": "623,4,0,0", "j4": "623,4,0,0",
-			"joint5": "623,5,0,0", "j5": "623,5,0,0",
-			"joint6": "623,6,0,0", "j6": "623,6,0,0",
-		}
-		if pid, exists := jointMap[cmd.Axis]; exists {
-			pidCommand = pid
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		} else {
+		pidCommand, pvalCommand, err = buildAxisCommand(jointAxisMap, cmd.Axis, step)
+		if err != nil {
 			return nil, fmt.Errorf("지원하지 않는 조인트: %s", cmd.Axis)
 		}
 	case "cartesian":
-		// 카르테시안 모드 JOG 명령
-		cartesianMap := map[string]string{
-			"x": "624,1,0,0", "y": "624,2,0,0", "z": "624,3,0,0",
-			"rx": "624,4,0,0", "ry": "624,5,0,0", "rz": "624,6,0,0",
-		}
-		if pid, exists := cartesianMap[cmd.Axis]; exists {
-			pidCommand = pid
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		} else {
+		pidCommand, pvalCommand, err = buildAxisCommand(cartesianAxisMap, cmd.Axis, step)
+		if err != nil {
 			return nil, fmt.Errorf("지원하지 않는 카르테시안 축: %s", cmd.Axis)
 		}
 	default:
@@ -78,7 +181,7 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 
 // getRobotData fetches all robot data
 func getRobotData() (*JogState, error) {
-	res, err := httpClient.Get("http://192.168.0.1/ROMDISK/web/Opr/jog/jogrefresh.asp")
+	res, err := httpClient.Get(ROBOT_DATA_URL)
 	if err != nil {
 		return nil, err
 	}
@@ -196,9 +299,8 @@ func monitorRobotPosition() {
 
 	for range ticker.C {
 		data, err := getRobotData()
-		if err != nil { // * 에러 로그 (시간 포함)
-			log.Printf("[%s] ❌ 좌표 읽기 실패: %v",
-				time.Now().Format("15:04:05"), err)
+		if err != nil {
+			logDebug("좌표 읽기 실패: %v", err)
 			continue
 		}
 
@@ -247,9 +349,8 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 		cmd.Step = 1.0 // 기본 스텝
 	}
 
-	// * 디버깅용 로그 (명령 추적 + 시간)
-	log.Printf("[%s] 🕹️  JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f",
-		time.Now().Format("15:04:05.000"), cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
+	// 명령 수신 로그
+	logInfo("JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
 
 	// JOG 명령을 로봇 프로토콜로 변환
 	form, err := buildJogCommand(cmd)
@@ -268,16 +369,15 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 		return response, err
 	}
 
-	// * 디버깅용 로그 (명령 추적 + 시간)
-	log.Printf("[%s] 🔗 전송된 명령: %s",
-		time.Now().Format("15:04:05.000"), response.Command)
+	// 명령 전송 로그
+	logDebug("전송된 명령: %s", response.Command)
 
 	return response, nil
 }
 
 // sendRobotCommand sends command to robot and returns response
 func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) {
-	resp, err := httpClient.PostForm("http://192.168.0.1/wrtpdb", form)
+	resp, err := httpClient.PostForm(ROBOT_COMMAND_URL, form)
 	if err != nil {
 		return &JogResponse{
 			Success: false,
@@ -293,29 +393,61 @@ func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) 
 		Command: form.Encode(),
 	}
 
-	// * 성공 메시지 (시간 포함)
-	fmt.Printf("[%s] ✅ %s\n",
-		time.Now().Format("15:04:05.000"), successMsg)
+	// 성공 메시지 로그
+	logInfo("%s", successMsg)
 
 	return response, nil
 }
 
-// setRobotJogMode sends jog mode change command to robot
-func setRobotJogMode(mode string) (*JogResponse, error) {
-	form := url.Values{}
-	form.Set("nPID", "2")
-	form.Set("Redirect", "/ROMDISK/web/dbfunctions.asp")
+// ModeConfig JOG 모드 설정 구조체
+type ModeConfig struct {
+	Enable  string
+	JogMode string
+}
 
-	// 모드별 PID 설정 (원본 jogscripts.asp 참고)
-	modeConfig := map[string]struct{ enable, jogMode string }{
-		"computer": {"0", "0"},
-		"joint":    {"1", "1"},
-		"world":    {"1", "2"},
-		"tool":     {"1", "3"},
-		"free":     {"1", "4"},
+// ModeInfo JOG 모드 정보 구조체 (설정과 표시명 포함)
+type ModeInfo struct {
+	Config      ModeConfig
+	DisplayName string
+	ModeNumber  int
+}
+
+// generateModeMap 모드 맵을 동적으로 생성하는 함수
+func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
+	modeMap := make(map[string]ModeConfig)
+	for i, info := range modeInfos {
+		var enable string
+		if i == 0 { // computer 모드만 "0"
+			enable = "0"
+		} else {
+			enable = "1"
+		}
+		config := ModeConfig{
+			Enable:  enable,
+			JogMode: fmt.Sprintf("%d", info.ModeNumber),
+		}
+		modeMap[strings.ToLower(info.DisplayName)] = config
+	}
+	return modeMap
+}
+
+// 모드 정보 정의
+var (
+	jogModeInfos = []ModeInfo{
+		{DisplayName: "Computer", ModeNumber: 0},
+		{DisplayName: "Joint", ModeNumber: 1},
+		{DisplayName: "World", ModeNumber: 2},
+		{DisplayName: "Tool", ModeNumber: 3},
+		{DisplayName: "Free", ModeNumber: 4},
 	}
 
-	config, exists := modeConfig[mode]
+	// 동적으로 생성된 모드 맵
+	jogModeConfigMap = generateModeMap(jogModeInfos)
+)
+
+// setRobotJogMode sends jog mode change command to robot
+func setRobotJogMode(mode string) (*JogResponse, error) {
+	config, exists := jogModeConfigMap[mode]
 	if !exists {
 		return &JogResponse{
 			Success: false,
@@ -324,14 +456,16 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 		}, fmt.Errorf("unsupported mode: %s", mode)
 	}
 
-	form.Set("PID1", "215,"+config.enable+",0,0")
-	form.Set("PVal1", config.enable)
-	form.Set("PID2", "621,"+config.jogMode+",0,0")
-	form.Set("PVal2", config.jogMode)
+	form := url.Values{}
+	form.Set("nPID", "2")
+	form.Set("Redirect", ROBOT_REDIRECT)
+	form.Set("PID1", fmt.Sprintf("%s,%s,0,0", PID_JOG_ENABLE, config.Enable))
+	form.Set("PVal1", config.Enable)
+	form.Set("PID2", fmt.Sprintf("%s,%s,0,0", PID_JOG_MODE, config.JogMode))
+	form.Set("PVal2", config.JogMode)
 
-	// * 디버깅용 로그 (모드 변경 추적 + 시간)
-	log.Printf("[%s] 🎮 JOG 모드 변경: %s",
-		time.Now().Format("15:04:05.000"), mode)
+	// 모드 변경 로그
+	logInfo("JOG 모드 변경: %s", mode)
 
 	// 로봇에 명령 전송
 	successMsg := fmt.Sprintf("JOG 모드 변경 성공: %s", mode)
@@ -342,17 +476,16 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 	form := url.Values{}
 	form.Set("nPID", "2")
-	form.Set("Redirect", "/ROMDISK/web/dbfunctions.asp")
+	form.Set("Redirect", ROBOT_REDIRECT)
 
 	// 축 선택 PID 설정 (원본 jogscripts.asp 참고)
-	form.Set("PID1", "622,0,0,0")
+	form.Set("PID1", fmt.Sprintf("%s,0,0,0", PID_AXIS_SELECT))
 	form.Set("PVal1", fmt.Sprintf("%d", axis))
-	form.Set("PID2", "620,0,0,0")
+	form.Set("PID2", fmt.Sprintf("%s,0,0,0", PID_ROBOT_SELECT))
 	form.Set("PVal2", fmt.Sprintf("%d", robot))
 
-	// * 디버깅용 로그 (축 선택 추적 + 시간)
-	log.Printf("[%s] 🎯 축 선택: 축=%d, 로봇=%d",
-		time.Now().Format("15:04:05.000"), axis, robot)
+	// 축 선택 로그
+	logInfo("축 선택: 축=%d, 로봇=%d", axis, robot)
 
 	// 로봇에 명령 전송
 	successMsg := fmt.Sprintf("축 선택 성공: 축=%d, 로봇=%d", axis, robot)
@@ -361,59 +494,35 @@ func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 
 // getJogModeText converts jog mode number to text
 func getJogModeText(mode int) string {
-	switch mode {
-	case 0:
-		return "Computer"
-	case 1:
-		return "Joint"
-	case 2:
-		return "World"
-	case 3:
-		return "Tool"
-	case 4:
-		return "Free"
-	default:
-		return fmt.Sprintf("Mode%d", mode)
+	// 모드 번호가 유효한 범위 내에 있는지 확인
+	if mode >= 0 && mode < len(jogModeInfos) {
+		return jogModeInfos[mode].DisplayName
 	}
+
+	// 범위를 벗어난 경우 기본 형식으로 반환
+	return fmt.Sprintf("Mode%d", mode)
 }
 
 // getAxisText returns axis name based on mode and axis number
 func getAxisText(jogMode int, axisNum int) string {
+	var axisInfos []AxisInfo
+
 	if jogMode == 1 { // Joint mode
-		switch axisNum {
-		case 1:
-			return "J1"
-		case 2:
-			return "J2"
-		case 3:
-			return "J3"
-		case 4:
-			return "J4"
-		case 5:
-			return "J5"
-		case 6:
-			return "J6"
-		default:
-			return fmt.Sprintf("J%d", axisNum)
-		}
+		axisInfos = jointAxisInfos
 	} else { // Cartesian modes (World, Tool, etc.)
-		switch axisNum {
-		case 1:
-			return "X"
-		case 2:
-			return "Y"
-		case 3:
-			return "Z"
-		case 4:
-			return "Rx"
-		case 5:
-			return "Ry"
-		case 6:
-			return "Rz"
-		default:
-			return fmt.Sprintf("Axis%d", axisNum)
-		}
+		axisInfos = cartesianAxisInfos
 	}
+
+	// 축 번호가 유효한 범위 내에 있는지 확인
+	if axisNum >= 1 && axisNum <= len(axisInfos) {
+		return axisInfos[axisNum-1].DisplayName
+	}
+
+	// 범위를 벗어난 경우 기본 형식으로 반환
+	if jogMode == 1 {
+		return fmt.Sprintf("J%d", axisNum)
+	}
+	return fmt.Sprintf("Axis%d", axisNum)
 }
 
 // hasDataChanged compares two JogState structs to detect changes
