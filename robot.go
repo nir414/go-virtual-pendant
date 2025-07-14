@@ -1,3 +1,17 @@
+// ============================================================================
+// robot.go - 로봇 제어 및 통신 관리
+// ============================================================================
+// 이 파일은 로봇과의 통신, 명령 전송, 데이터 파싱, 모니터링 등의
+// 모든 로봇 관련 기능을 담당합니다.
+//
+// 주요 기능:
+// - JOG 명령 처리 및 전송
+// - 로봇 상태 데이터 조회 및 파싱
+// - 실시간 위치 모니터링
+// - 축/모드 설정 관리
+// - 로봇 통신 프로토콜 처리
+// ============================================================================
+
 package main
 
 import (
@@ -11,57 +25,16 @@ import (
 	"time"
 )
 
-// 로깅 레벨 설정
-type LogLevel int
+// ============================================================================
+// 상수 정의 (Constants)
+// ============================================================================
 
+// 로깅 레벨 상수
 const (
 	LogLevelInfo LogLevel = iota
 	LogLevelDebug
 	LogLevelVerbose
 )
-
-var currentLogLevel LogLevel
-
-func init() {
-	// 환경변수로 로그 레벨 설정
-	switch os.Getenv("LOG_LEVEL") {
-	case "DEBUG":
-		currentLogLevel = LogLevelDebug
-	case "VERBOSE":
-		currentLogLevel = LogLevelVerbose
-	default:
-		currentLogLevel = LogLevelInfo
-	}
-}
-
-// 로깅 함수들
-func logInfo(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelInfo {
-		log.Printf("ℹ️  "+format, args...)
-	}
-}
-
-func logDebug(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelDebug {
-		log.Printf("🔍 "+format, args...)
-	}
-}
-
-func logVerbose(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelVerbose {
-		log.Printf("🔧 "+format, args...)
-	}
-}
-
-// HTTP 클라이언트 재사용으로 연결 풀링 최적화
-var httpClient = &http.Client{
-	Timeout: 5 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 2,
-		IdleConnTimeout:     30 * time.Second,
-	},
-}
 
 // 로봇 명령 PID 상수
 const (
@@ -81,6 +54,13 @@ const (
 	ROBOT_REDIRECT    = "/ROMDISK/web/dbfunctions.asp"
 )
 
+// ============================================================================
+// 타입 정의 (Types & Structs)
+// ============================================================================
+
+// LogLevel 로깅 레벨 타입
+type LogLevel int
+
 // AxisConfig 축 설정 구조체
 type AxisConfig struct {
 	PID  string
@@ -94,16 +74,34 @@ type AxisInfo struct {
 	Aliases     []string // 별칭들 (j1, joint1 등)
 }
 
-// generateAxisMap 축 맵을 동적으로 생성하는 함수
-func generateAxisMap(pidBase string, axisInfos []AxisInfo) map[string]AxisConfig {
-	axisMap := make(map[string]AxisConfig)
-	for i, info := range axisInfos {
-		config := AxisConfig{PID: pidBase, Axis: i + 1}
-		for _, alias := range info.Aliases {
-			axisMap[alias] = config
-		}
-	}
-	return axisMap
+// ModeConfig JOG 모드 설정 구조체
+type ModeConfig struct {
+	Enable  string
+	JogMode string
+}
+
+// ModeInfo JOG 모드 정보 구조체 (설정과 표시명 포함)
+type ModeInfo struct {
+	Config      ModeConfig
+	DisplayName string
+	ModeNumber  int
+}
+
+// ============================================================================
+// 전역 변수 (Global Variables)
+// ============================================================================
+
+// 로깅 레벨 전역 변수
+var currentLogLevel LogLevel
+
+// HTTP 클라이언트 재사용으로 연결 풀링 최적화
+var httpClient = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     30 * time.Second,
+	},
 }
 
 // 축 정보 정의
@@ -131,6 +129,102 @@ var (
 	cartesianAxisMap = generateAxisMap(CartesianModePID, cartesianAxisInfos)
 )
 
+// 모드 정보 정의
+var (
+	jogModeInfos = []ModeInfo{
+		{DisplayName: "Computer", ModeNumber: 0},
+		{DisplayName: "Joint", ModeNumber: 1},
+		{DisplayName: "World", ModeNumber: 2},
+		{DisplayName: "Tool", ModeNumber: 3},
+		{DisplayName: "Free", ModeNumber: 4},
+	}
+
+	// 동적으로 생성된 모드 맵
+	jogModeConfigMap = generateModeMap(jogModeInfos)
+)
+
+// ============================================================================
+// 초기화 함수 (Initialization)
+// ============================================================================
+
+func init() {
+	// 환경변수로 로그 레벨 설정
+	switch os.Getenv("LOG_LEVEL") {
+	case "DEBUG":
+		currentLogLevel = LogLevelDebug
+	case "VERBOSE":
+		currentLogLevel = LogLevelVerbose
+	default:
+		currentLogLevel = LogLevelInfo
+	}
+}
+
+// ============================================================================
+// 로깅 유틸리티 (Logging Utilities)
+// ============================================================================
+// 로깅 유틸리티 (Logging Utilities)
+// ============================================================================
+
+// logInfo 정보 레벨 로그 출력
+func logInfo(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelInfo {
+		log.Printf("ℹ️  "+format, args...)
+	}
+}
+
+// logDebug 디버그 레벨 로그 출력
+func logDebug(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelDebug {
+		log.Printf("🔍 "+format, args...)
+	}
+}
+
+// logVerbose 상세 레벨 로그 출력
+func logVerbose(format string, args ...interface{}) {
+	if currentLogLevel >= LogLevelVerbose {
+		log.Printf("🔧 "+format, args...)
+	}
+}
+
+// ============================================================================
+// 축 및 모드 생성 함수 (Generator Functions)
+// ============================================================================
+
+// generateAxisMap 축 맵을 동적으로 생성하는 함수
+func generateAxisMap(pidBase string, axisInfos []AxisInfo) map[string]AxisConfig {
+	axisMap := make(map[string]AxisConfig)
+	for i, info := range axisInfos {
+		config := AxisConfig{PID: pidBase, Axis: i + 1}
+		for _, alias := range info.Aliases {
+			axisMap[alias] = config
+		}
+	}
+	return axisMap
+}
+
+// generateModeMap 모드 맵을 동적으로 생성하는 함수
+func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
+	modeMap := make(map[string]ModeConfig)
+	for i, info := range modeInfos {
+		var enable string
+		if i == 0 { // computer 모드만 "0"
+			enable = "0"
+		} else {
+			enable = "1"
+		}
+		config := ModeConfig{
+			Enable:  enable,
+			JogMode: fmt.Sprintf("%d", info.ModeNumber),
+		}
+		modeMap[strings.ToLower(info.DisplayName)] = config
+	}
+	return modeMap
+}
+
+// ============================================================================
+// 명령 빌더 함수 (Command Builder Functions)
+// ============================================================================
+
 // buildAxisCommand 축별 명령 생성 헬퍼 함수
 func buildAxisCommand(axisMap map[string]AxisConfig, axis string, step float64) (string, string, error) {
 	if config, exists := axisMap[axis]; exists {
@@ -141,7 +235,7 @@ func buildAxisCommand(axisMap map[string]AxisConfig, axis string, step float64) 
 	return "", "", fmt.Errorf("지원하지 않는 축: %s", axis)
 }
 
-// buildJogCommand converts JOG command to robot protocol
+// buildJogCommand JOG 명령을 로봇 프로토콜로 변환
 func buildJogCommand(cmd JogCommand) (url.Values, error) {
 	form := url.Values{}
 	form.Set("nPID", "1")
@@ -179,7 +273,122 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 	return form, nil
 }
 
-// getRobotData fetches all robot data
+// ============================================================================
+// 로봇 통신 함수 (Robot Communication Functions)
+// ============================================================================
+
+// sendRobotCommand 로봇에 명령 전송
+func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) {
+	resp, err := httpClient.PostForm(ROBOT_COMMAND_URL, form)
+	if err != nil {
+		return &JogResponse{
+			Success: false,
+			Message: "로봇 통신 실패: " + err.Error(),
+			Command: form.Encode(),
+		}, err
+	}
+	defer resp.Body.Close()
+
+	response := &JogResponse{
+		Success: true,
+		Message: successMsg,
+		Command: form.Encode(),
+	}
+
+	// 성공 메시지 로그
+	logInfo("%s", successMsg)
+
+	return response, nil
+}
+
+// sendJogCommand JOG 명령을 로봇에 전송
+func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
+	// 기본값 설정
+	if cmd.Mode == "" {
+		cmd.Mode = "joint"
+	}
+	if cmd.Step == 0 {
+		cmd.Step = 1.0 // 기본 스텝
+	}
+
+	// 명령 수신 로그
+	logInfo("JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
+
+	// JOG 명령을 로봇 프로토콜로 변환
+	form, err := buildJogCommand(cmd)
+	if err != nil {
+		return &JogResponse{
+			Success: false,
+			Message: "명령 생성 실패: " + err.Error(),
+			Command: "",
+		}, err
+	}
+
+	// 로봇에 명령 전송
+	successMsg := fmt.Sprintf("JOG 명령 성공: %s %s %s %.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
+	response, err := sendRobotCommand(form, successMsg)
+	if err != nil {
+		return response, err
+	}
+
+	// 명령 전송 로그
+	logDebug("전송된 명령: %s", response.Command)
+
+	return response, nil
+}
+
+// setRobotJogMode 로봇 JOG 모드 변경
+func setRobotJogMode(mode string) (*JogResponse, error) {
+	config, exists := jogModeConfigMap[mode]
+	if !exists {
+		return &JogResponse{
+			Success: false,
+			Message: "지원하지 않는 모드: " + mode,
+			Command: "",
+		}, fmt.Errorf("unsupported mode: %s", mode)
+	}
+
+	form := url.Values{}
+	form.Set("nPID", "2")
+	form.Set("Redirect", ROBOT_REDIRECT)
+	form.Set("PID1", fmt.Sprintf("%s,%s,0,0", PID_JOG_ENABLE, config.Enable))
+	form.Set("PVal1", config.Enable)
+	form.Set("PID2", fmt.Sprintf("%s,%s,0,0", PID_JOG_MODE, config.JogMode))
+	form.Set("PVal2", config.JogMode)
+
+	// 모드 변경 로그
+	logInfo("JOG 모드 변경: %s", mode)
+
+	// 로봇에 명령 전송
+	successMsg := fmt.Sprintf("JOG 모드 변경 성공: %s", mode)
+	return sendRobotCommand(form, successMsg)
+}
+
+// setRobotAxis 로봇 축 선택
+func setRobotAxis(axis int, robot int) (*JogResponse, error) {
+	form := url.Values{}
+	form.Set("nPID", "2")
+	form.Set("Redirect", ROBOT_REDIRECT)
+
+	// 축 선택 PID 설정 (원본 jogscripts.asp 참고)
+	form.Set("PID1", fmt.Sprintf("%s,0,0,0", PID_AXIS_SELECT))
+	form.Set("PVal1", fmt.Sprintf("%d", axis))
+	form.Set("PID2", fmt.Sprintf("%s,0,0,0", PID_ROBOT_SELECT))
+	form.Set("PVal2", fmt.Sprintf("%d", robot))
+
+	// 축 선택 로그
+	logInfo("축 선택: 축=%d, 로봇=%d", axis, robot)
+
+	// 로봇에 명령 전송
+	successMsg := fmt.Sprintf("축 선택 성공: 축=%d, 로봇=%d", axis, robot)
+	return sendRobotCommand(form, successMsg)
+}
+
+// ============================================================================
+// 데이터 파싱 및 조회 함수 (Data Parsing & Retrieval Functions)
+// ============================================================================
+
+// getRobotData 로봇의 모든 데이터 조회
 func getRobotData() (*JogState, error) {
 	res, err := httpClient.Get(ROBOT_DATA_URL)
 	if err != nil {
@@ -270,18 +479,7 @@ func getRobotData() (*JogState, error) {
 	}, nil
 }
 
-// parseFloat parses string to float64 with error handling
-func parseFloat(s string) (float64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0.0, nil
-	}
-	var v float64
-	_, err := fmt.Sscanf(s, "%f", &v)
-	return v, err
-}
-
-// getRobotCoordinates returns robot coordinates for backward compatibility
+// getRobotCoordinates 로봇 좌표 조회 (하위 호환성용)
 func getRobotCoordinates() ([]float64, error) {
 	data, err := getRobotData()
 	if err != nil {
@@ -290,7 +488,11 @@ func getRobotCoordinates() ([]float64, error) {
 	return data.Joint, nil
 }
 
-// monitorRobotPosition periodically prints robot position
+// ============================================================================
+// 모니터링 함수 (Monitoring Functions)
+// ============================================================================
+
+// monitorRobotPosition 로봇 위치를 주기적으로 모니터링
 func monitorRobotPosition() {
 	ticker := time.NewTicker(1 * time.Second) // 1초마다 확인
 	defer ticker.Stop()
@@ -326,206 +528,7 @@ func monitorRobotPosition() {
 	}
 }
 
-// getSafeValue safely gets array value with bounds checking
-func getSafeValue(coords []float64, index int) float64 {
-	if index < len(coords) {
-		return coords[index]
-	}
-	return 0.0
-}
-
-// getCoordValue returns coordinate value for backward compatibility
-func getCoordValue(coords []float64, index int) float64 {
-	return getSafeValue(coords, index)
-}
-
-// sendJogCommand sends jog command to robot
-func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
-	// 기본값 설정
-	if cmd.Mode == "" {
-		cmd.Mode = "joint"
-	}
-	if cmd.Step == 0 {
-		cmd.Step = 1.0 // 기본 스텝
-	}
-
-	// 명령 수신 로그
-	logInfo("JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
-
-	// JOG 명령을 로봇 프로토콜로 변환
-	form, err := buildJogCommand(cmd)
-	if err != nil {
-		return &JogResponse{
-			Success: false,
-			Message: "명령 생성 실패: " + err.Error(),
-			Command: "",
-		}, err
-	}
-
-	// 로봇에 명령 전송
-	successMsg := fmt.Sprintf("JOG 명령 성공: %s %s %s %.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
-	response, err := sendRobotCommand(form, successMsg)
-	if err != nil {
-		return response, err
-	}
-
-	// 명령 전송 로그
-	logDebug("전송된 명령: %s", response.Command)
-
-	return response, nil
-}
-
-// sendRobotCommand sends command to robot and returns response
-func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) {
-	resp, err := httpClient.PostForm(ROBOT_COMMAND_URL, form)
-	if err != nil {
-		return &JogResponse{
-			Success: false,
-			Message: "로봇 통신 실패: " + err.Error(),
-			Command: form.Encode(),
-		}, err
-	}
-	defer resp.Body.Close()
-
-	response := &JogResponse{
-		Success: true,
-		Message: successMsg,
-		Command: form.Encode(),
-	}
-
-	// 성공 메시지 로그
-	logInfo("%s", successMsg)
-
-	return response, nil
-}
-
-// ModeConfig JOG 모드 설정 구조체
-type ModeConfig struct {
-	Enable  string
-	JogMode string
-}
-
-// ModeInfo JOG 모드 정보 구조체 (설정과 표시명 포함)
-type ModeInfo struct {
-	Config      ModeConfig
-	DisplayName string
-	ModeNumber  int
-}
-
-// generateModeMap 모드 맵을 동적으로 생성하는 함수
-func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
-	modeMap := make(map[string]ModeConfig)
-	for i, info := range modeInfos {
-		var enable string
-		if i == 0 { // computer 모드만 "0"
-			enable = "0"
-		} else {
-			enable = "1"
-		}
-		config := ModeConfig{
-			Enable:  enable,
-			JogMode: fmt.Sprintf("%d", info.ModeNumber),
-		}
-		modeMap[strings.ToLower(info.DisplayName)] = config
-	}
-	return modeMap
-}
-
-// 모드 정보 정의
-var (
-	jogModeInfos = []ModeInfo{
-		{DisplayName: "Computer", ModeNumber: 0},
-		{DisplayName: "Joint", ModeNumber: 1},
-		{DisplayName: "World", ModeNumber: 2},
-		{DisplayName: "Tool", ModeNumber: 3},
-		{DisplayName: "Free", ModeNumber: 4},
-	}
-
-	// 동적으로 생성된 모드 맵
-	jogModeConfigMap = generateModeMap(jogModeInfos)
-)
-
-// setRobotJogMode sends jog mode change command to robot
-func setRobotJogMode(mode string) (*JogResponse, error) {
-	config, exists := jogModeConfigMap[mode]
-	if !exists {
-		return &JogResponse{
-			Success: false,
-			Message: "지원하지 않는 모드: " + mode,
-			Command: "",
-		}, fmt.Errorf("unsupported mode: %s", mode)
-	}
-
-	form := url.Values{}
-	form.Set("nPID", "2")
-	form.Set("Redirect", ROBOT_REDIRECT)
-	form.Set("PID1", fmt.Sprintf("%s,%s,0,0", PID_JOG_ENABLE, config.Enable))
-	form.Set("PVal1", config.Enable)
-	form.Set("PID2", fmt.Sprintf("%s,%s,0,0", PID_JOG_MODE, config.JogMode))
-	form.Set("PVal2", config.JogMode)
-
-	// 모드 변경 로그
-	logInfo("JOG 모드 변경: %s", mode)
-
-	// 로봇에 명령 전송
-	successMsg := fmt.Sprintf("JOG 모드 변경 성공: %s", mode)
-	return sendRobotCommand(form, successMsg)
-}
-
-// setRobotAxis sends axis selection command to robot
-func setRobotAxis(axis int, robot int) (*JogResponse, error) {
-	form := url.Values{}
-	form.Set("nPID", "2")
-	form.Set("Redirect", ROBOT_REDIRECT)
-
-	// 축 선택 PID 설정 (원본 jogscripts.asp 참고)
-	form.Set("PID1", fmt.Sprintf("%s,0,0,0", PID_AXIS_SELECT))
-	form.Set("PVal1", fmt.Sprintf("%d", axis))
-	form.Set("PID2", fmt.Sprintf("%s,0,0,0", PID_ROBOT_SELECT))
-	form.Set("PVal2", fmt.Sprintf("%d", robot))
-
-	// 축 선택 로그
-	logInfo("축 선택: 축=%d, 로봇=%d", axis, robot)
-
-	// 로봇에 명령 전송
-	successMsg := fmt.Sprintf("축 선택 성공: 축=%d, 로봇=%d", axis, robot)
-	return sendRobotCommand(form, successMsg)
-}
-
-// getJogModeText converts jog mode number to text
-func getJogModeText(mode int) string {
-	// 모드 번호가 유효한 범위 내에 있는지 확인
-	if mode >= 0 && mode < len(jogModeInfos) {
-		return jogModeInfos[mode].DisplayName
-	}
-
-	// 범위를 벗어난 경우 기본 형식으로 반환
-	return fmt.Sprintf("Mode%d", mode)
-}
-
-// getAxisText returns axis name based on mode and axis number
-func getAxisText(jogMode int, axisNum int) string {
-	var axisInfos []AxisInfo
-
-	if jogMode == 1 { // Joint mode
-		axisInfos = jointAxisInfos
-	} else { // Cartesian modes (World, Tool, etc.)
-		axisInfos = cartesianAxisInfos
-	}
-
-	// 축 번호가 유효한 범위 내에 있는지 확인
-	if axisNum >= 1 && axisNum <= len(axisInfos) {
-		return axisInfos[axisNum-1].DisplayName
-	}
-
-	// 범위를 벗어난 경우 기본 형식으로 반환
-	if jogMode == 1 {
-		return fmt.Sprintf("J%d", axisNum)
-	}
-	return fmt.Sprintf("Axis%d", axisNum)
-}
-
-// hasDataChanged compares two JogState structs to detect changes
+// hasDataChanged 두 JogState 구조체를 비교하여 변경 사항을 감지
 func hasDataChanged(prev, current *JogState) bool {
 	// 조인트 각도 변경 확인 (0.1도 이상 차이)
 	for i := 0; i < 3 && i < len(prev.Joint) && i < len(current.Joint); i++ {
@@ -554,7 +557,68 @@ func hasDataChanged(prev, current *JogState) bool {
 	return false
 }
 
-// abs returns absolute value of float64
+// ============================================================================
+// 유틸리티 함수 (Utility Functions)
+// ============================================================================
+
+// parseFloat 문자열을 float64로 안전하게 파싱
+func parseFloat(s string) (float64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0.0, nil
+	}
+	var v float64
+	_, err := fmt.Sscanf(s, "%f", &v)
+	return v, err
+}
+
+// getSafeValue 배열 경계 검사와 함께 안전하게 값 조회
+func getSafeValue(coords []float64, index int) float64 {
+	if index < len(coords) {
+		return coords[index]
+	}
+	return 0.0
+}
+
+// getCoordValue 좌표 값 조회 (하위 호환성용)
+func getCoordValue(coords []float64, index int) float64 {
+	return getSafeValue(coords, index)
+}
+
+// getJogModeText 모드 번호를 텍스트로 변환
+func getJogModeText(mode int) string {
+	// 모드 번호가 유효한 범위 내에 있는지 확인
+	if mode >= 0 && mode < len(jogModeInfos) {
+		return jogModeInfos[mode].DisplayName
+	}
+
+	// 범위를 벗어난 경우 기본 형식으로 반환
+	return fmt.Sprintf("Mode%d", mode)
+}
+
+// getAxisText 모드와 축 번호에 따른 축 이름 반환
+func getAxisText(jogMode int, axisNum int) string {
+	var axisInfos []AxisInfo
+
+	if jogMode == 1 { // Joint mode
+		axisInfos = jointAxisInfos
+	} else { // Cartesian modes (World, Tool, etc.)
+		axisInfos = cartesianAxisInfos
+	}
+
+	// 축 번호가 유효한 범위 내에 있는지 확인
+	if axisNum >= 1 && axisNum <= len(axisInfos) {
+		return axisInfos[axisNum-1].DisplayName
+	}
+
+	// 범위를 벗어난 경우 기본 형식으로 반환
+	if jogMode == 1 {
+		return fmt.Sprintf("J%d", axisNum)
+	}
+	return fmt.Sprintf("Axis%d", axisNum)
+}
+
+// abs float64의 절댓값 반환
 func abs(x float64) float64 {
 	if x < 0 {
 		return -x
