@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+// HTTP 클라이언트 재사용으로 연결 풀링 최적화
+var httpClient = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     30 * time.Second,
+	},
+}
+
 // buildJogCommand converts JOG command to robot protocol
 func buildJogCommand(cmd JogCommand) (url.Values, error) {
 	form := url.Values{}
@@ -30,50 +40,30 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 	switch cmd.Mode {
 	case "joint":
 		// 조인트 모드 JOG 명령
-		switch cmd.Axis {
-		case "joint1", "j1":
-			pidCommand = "623,1,0,0" // Joint1 조깅
+		jointMap := map[string]string{
+			"joint1": "623,1,0,0", "j1": "623,1,0,0",
+			"joint2": "623,2,0,0", "j2": "623,2,0,0",
+			"joint3": "623,3,0,0", "j3": "623,3,0,0",
+			"joint4": "623,4,0,0", "j4": "623,4,0,0",
+			"joint5": "623,5,0,0", "j5": "623,5,0,0",
+			"joint6": "623,6,0,0", "j6": "623,6,0,0",
+		}
+		if pid, exists := jointMap[cmd.Axis]; exists {
+			pidCommand = pid
 			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "joint2", "j2":
-			pidCommand = "623,2,0,0" // Joint2 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "joint3", "j3":
-			pidCommand = "623,3,0,0" // Joint3 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "joint4", "j4":
-			pidCommand = "623,4,0,0" // Joint4 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "joint5", "j5":
-			pidCommand = "623,5,0,0" // Joint5 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "joint6", "j6":
-			pidCommand = "623,6,0,0" // Joint6 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		default:
+		} else {
 			return nil, fmt.Errorf("지원하지 않는 조인트: %s", cmd.Axis)
 		}
 	case "cartesian":
 		// 카르테시안 모드 JOG 명령
-		switch cmd.Axis {
-		case "x":
-			pidCommand = "624,1,0,0" // X축 조깅
+		cartesianMap := map[string]string{
+			"x": "624,1,0,0", "y": "624,2,0,0", "z": "624,3,0,0",
+			"rx": "624,4,0,0", "ry": "624,5,0,0", "rz": "624,6,0,0",
+		}
+		if pid, exists := cartesianMap[cmd.Axis]; exists {
+			pidCommand = pid
 			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "y":
-			pidCommand = "624,2,0,0" // Y축 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "z":
-			pidCommand = "624,3,0,0" // Z축 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "rx":
-			pidCommand = "624,4,0,0" // Rx 회전 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "ry":
-			pidCommand = "624,5,0,0" // Ry 회전 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		case "rz":
-			pidCommand = "624,6,0,0" // Rz 회전 조깅
-			pvalCommand = fmt.Sprintf("%.3f", step)
-		default:
+		} else {
 			return nil, fmt.Errorf("지원하지 않는 카르테시안 축: %s", cmd.Axis)
 		}
 	default:
@@ -88,7 +78,7 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 
 // getRobotData fetches all robot data
 func getRobotData() (*JogState, error) {
-	res, err := http.Get("http://192.168.0.1/ROMDISK/web/Opr/jog/jogrefresh.asp")
+	res, err := httpClient.Get("http://192.168.0.1/ROMDISK/web/Opr/jog/jogrefresh.asp")
 	if err != nil {
 		return nil, err
 	}
@@ -206,8 +196,7 @@ func monitorRobotPosition() {
 
 	for range ticker.C {
 		data, err := getRobotData()
-		if err != nil {
-			// * 에러 로그 (시간 포함)
+		if err != nil { // * 에러 로그 (시간 포함)
 			log.Printf("[%s] ❌ 좌표 읽기 실패: %v",
 				time.Now().Format("15:04:05"), err)
 			continue
@@ -273,7 +262,22 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 	}
 
 	// 로봇에 명령 전송
-	resp, err := http.PostForm("http://192.168.0.1/wrtpdb", form)
+	successMsg := fmt.Sprintf("JOG 명령 성공: %s %s %s %.3f", cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
+	response, err := sendRobotCommand(form, successMsg)
+	if err != nil {
+		return response, err
+	}
+
+	// * 디버깅용 로그 (명령 추적 + 시간)
+	log.Printf("[%s] 🔗 전송된 명령: %s",
+		time.Now().Format("15:04:05.000"), response.Command)
+
+	return response, nil
+}
+
+// sendRobotCommand sends command to robot and returns response
+func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) {
+	resp, err := httpClient.PostForm("http://192.168.0.1/wrtpdb", form)
 	if err != nil {
 		return &JogResponse{
 			Success: false,
@@ -283,20 +287,15 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	// 성공 응답
 	response := &JogResponse{
 		Success: true,
-		Message: fmt.Sprintf("JOG 명령 성공: %s %s %s %.3f",
-			cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step),
+		Message: successMsg,
 		Command: form.Encode(),
 	}
 
 	// * 성공 메시지 (시간 포함)
-	fmt.Printf("[%s] ✅ JOG 명령 전송 성공: %s\n",
-		time.Now().Format("15:04:05.000"), response.Message)
-	// * 디버깅용 로그 (명령 추적 + 시간)
-	log.Printf("[%s] 🔗 전송된 명령: %s",
-		time.Now().Format("15:04:05.000"), response.Command)
+	fmt.Printf("[%s] ✅ %s\n",
+		time.Now().Format("15:04:05.000"), successMsg)
 
 	return response, nil
 }
@@ -308,33 +307,16 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 	form.Set("Redirect", "/ROMDISK/web/dbfunctions.asp")
 
 	// 모드별 PID 설정 (원본 jogscripts.asp 참고)
-	switch mode {
-	case "computer":
-		form.Set("PID1", "215,0,0,0")
-		form.Set("PVal1", "0")
-		form.Set("PID2", "621,0,0,0")
-		form.Set("PVal2", "0")
-	case "joint":
-		form.Set("PID1", "215,1,0,0")
-		form.Set("PVal1", "1")
-		form.Set("PID2", "621,1,0,0")
-		form.Set("PVal2", "1")
-	case "world":
-		form.Set("PID1", "215,1,0,0")
-		form.Set("PVal1", "1")
-		form.Set("PID2", "621,2,0,0")
-		form.Set("PVal2", "2")
-	case "tool":
-		form.Set("PID1", "215,1,0,0")
-		form.Set("PVal1", "1")
-		form.Set("PID2", "621,3,0,0")
-		form.Set("PVal2", "3")
-	case "free":
-		form.Set("PID1", "215,1,0,0")
-		form.Set("PVal1", "1")
-		form.Set("PID2", "621,4,0,0")
-		form.Set("PVal2", "4")
-	default:
+	modeConfig := map[string]struct{ enable, jogMode string }{
+		"computer": {"0", "0"},
+		"joint":    {"1", "1"},
+		"world":    {"1", "2"},
+		"tool":     {"1", "3"},
+		"free":     {"1", "4"},
+	}
+
+	config, exists := modeConfig[mode]
+	if !exists {
 		return &JogResponse{
 			Success: false,
 			Message: "지원하지 않는 모드: " + mode,
@@ -342,31 +324,18 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 		}, fmt.Errorf("unsupported mode: %s", mode)
 	}
 
+	form.Set("PID1", "215,"+config.enable+",0,0")
+	form.Set("PVal1", config.enable)
+	form.Set("PID2", "621,"+config.jogMode+",0,0")
+	form.Set("PVal2", config.jogMode)
+
 	// * 디버깅용 로그 (모드 변경 추적 + 시간)
 	log.Printf("[%s] 🎮 JOG 모드 변경: %s",
 		time.Now().Format("15:04:05.000"), mode)
 
 	// 로봇에 명령 전송
-	resp, err := http.PostForm("http://192.168.0.1/wrtpdb", form)
-	if err != nil {
-		return &JogResponse{
-			Success: false,
-			Message: "로봇 통신 실패: " + err.Error(),
-			Command: form.Encode(),
-		}, err
-	}
-	defer resp.Body.Close()
-
-	response := &JogResponse{
-		Success: true,
-		Message: fmt.Sprintf("JOG 모드 변경 성공: %s", mode),
-		Command: form.Encode(),
-	}
-
-	// * 성공 메시지 (시간 포함)
-	fmt.Printf("[%s] ✅ JOG 모드 변경 성공: %s\n",
-		time.Now().Format("15:04:05.000"), response.Message)
-	return response, nil
+	successMsg := fmt.Sprintf("JOG 모드 변경 성공: %s", mode)
+	return sendRobotCommand(form, successMsg)
 }
 
 // setRobotAxis sends axis selection command to robot
@@ -386,26 +355,8 @@ func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 		time.Now().Format("15:04:05.000"), axis, robot)
 
 	// 로봇에 명령 전송
-	resp, err := http.PostForm("http://192.168.0.1/wrtpdb", form)
-	if err != nil {
-		return &JogResponse{
-			Success: false,
-			Message: "로봇 통신 실패: " + err.Error(),
-			Command: form.Encode(),
-		}, err
-	}
-	defer resp.Body.Close()
-
-	response := &JogResponse{
-		Success: true,
-		Message: fmt.Sprintf("축 선택 성공: 축=%d, 로봇=%d", axis, robot),
-		Command: form.Encode(),
-	}
-
-	// * 성공 메시지 (시간 포함)
-	fmt.Printf("[%s] ✅ 축 선택 성공: %s\n",
-		time.Now().Format("15:04:05.000"), response.Message)
-	return response, nil
+	successMsg := fmt.Sprintf("축 선택 성공: 축=%d, 로봇=%d", axis, robot)
+	return sendRobotCommand(form, successMsg)
 }
 
 // getJogModeText converts jog mode number to text

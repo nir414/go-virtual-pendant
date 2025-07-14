@@ -1,11 +1,13 @@
 {
-    // * VS Code 디버그 설정 파일
-    // NOTE: Go 프로젝트용 다양한 실행 모드 제공
+    // * VS Code 통합 디버깅 설정 파일
+    // NOTE: 다양한 언어와 플랫폼을 지원하는 범용 디버깅 환경
+    // 🎯 목표: Go, JavaScript, Chrome, Node.js 등 멀티 스택 프로젝트 지원
+    // 🔧 특징: 기존 코드 스타일 보존, 최소한의 변경, 높은 호환성
     "version": "0.2.0",
     "configurations": [
         {
             // * 기본 개발 모드 - 빠른 개발 및 테스트용
-            // NOTE: 일반적인 개발 작업에 가장 많이 사용
+            // 🎯 용도: 일반적인 개발 작업, 코드 스타일 보존 우선
             "name": "🚀 Launch Package",
             "type": "go",
             "request": "launch",
@@ -21,8 +23,7 @@
         },
         {
             // * 디버깅 전용 모드 - 상세한 디버깅 정보와 함께
-            // NOTE: 복잡한 버그 추적 및 단계별 실행 시 사용
-            // ! 성능이 느릴 수 있으니 디버깅 시에만 사용
+            // ⚠️ 주의: 기존 코드 구조 변경 최소화, 성능보다 안정성 우선
             "name": "🔧 Debug Mode",
             "type": "go",
             "request": "launch",
@@ -92,6 +93,35 @@
             "request": "attach",
             "mode": "local",
             "processId": 0
+        },
+        {
+            // * JavaScript/웹 디버깅 - 브라우저 연동
+            // 🎯 목적: 기존 코드 스타일 유지하면서 디버깅 지원
+            // 🔧 특징: 과도한 주석 추가 금지, 깔끔한 코드 보존
+            "name": "🌐 Debug JavaScript in Chrome",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8082",
+            "webRoot": "${workspaceFolder}/static",
+            "sourceMaps": true,
+            "smartStep": true,
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "runtimeArgs": [
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor"
+            ]
+        },
+        {
+            // * 브라우저 연결 디버깅 - 실행 중인 Chrome에 연결
+            // 🎯 원칙: 코드 간결성 유지, 불필요한 설명 주석 최소화
+            "name": "🔗 Attach to Chrome",
+            "type": "chrome",
+            "request": "attach",
+            "port": 9222,
+            "webRoot": "${workspaceFolder}/static",
+            "sourceMaps": true
         }
     ]
 }
