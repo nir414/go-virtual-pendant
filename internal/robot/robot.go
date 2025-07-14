@@ -1,5 +1,5 @@
 // ============================================================================
-// robot.go - 로봇 제어 및 통신 관리
+// internal/robot/robot.go - 로봇 제어 및 통신 관리
 // ============================================================================
 // 이 파일은 로봇과의 통신, 명령 전송, 데이터 파싱, 모니터링 등의
 // 모든 로봇 관련 기능을 담당합니다.
@@ -12,7 +12,7 @@
 // - 로봇 통신 프로토콜 처리
 // ============================================================================
 
-package main
+package robot
 
 import (
 	"fmt"
@@ -23,18 +23,13 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/nir414/go-virtual-pendant/internal/types"
 )
 
 // ============================================================================
 // 상수 정의 (Constants)
 // ============================================================================
-
-// 로깅 레벨 상수
-const (
-	LogLevelInfo LogLevel = iota
-	LogLevelDebug
-	LogLevelVerbose
-)
 
 // 로봇 명령 PID 상수
 const (
@@ -55,44 +50,11 @@ const (
 )
 
 // ============================================================================
-// 타입 정의 (Types & Structs)
-// ============================================================================
-
-// LogLevel 로깅 레벨 타입
-type LogLevel int
-
-// AxisConfig 축 설정 구조체
-type AxisConfig struct {
-	PID  string
-	Axis int
-}
-
-// AxisInfo 축 정보 구조체 (이름과 표시명 포함)
-type AxisInfo struct {
-	Config      AxisConfig
-	DisplayName string
-	Aliases     []string // 별칭들 (j1, joint1 등)
-}
-
-// ModeConfig JOG 모드 설정 구조체
-type ModeConfig struct {
-	Enable  string
-	JogMode string
-}
-
-// ModeInfo JOG 모드 정보 구조체 (설정과 표시명 포함)
-type ModeInfo struct {
-	Config      ModeConfig
-	DisplayName string
-	ModeNumber  int
-}
-
-// ============================================================================
 // 전역 변수 (Global Variables)
 // ============================================================================
 
 // 로깅 레벨 전역 변수
-var currentLogLevel LogLevel
+var currentLogLevel types.LogLevel
 
 // HTTP 클라이언트 재사용으로 연결 풀링 최적화
 var httpClient = &http.Client{
@@ -106,7 +68,7 @@ var httpClient = &http.Client{
 
 // 축 정보 정의
 var (
-	jointAxisInfos = []AxisInfo{
+	jointAxisInfos = []types.AxisInfo{
 		{DisplayName: "J1", Aliases: []string{"joint1", "j1"}},
 		{DisplayName: "J2", Aliases: []string{"joint2", "j2"}},
 		{DisplayName: "J3", Aliases: []string{"joint3", "j3"}},
@@ -115,7 +77,7 @@ var (
 		{DisplayName: "J6", Aliases: []string{"joint6", "j6"}},
 	}
 
-	cartesianAxisInfos = []AxisInfo{
+	cartesianAxisInfos = []types.AxisInfo{
 		{DisplayName: "X", Aliases: []string{"x"}},
 		{DisplayName: "Y", Aliases: []string{"y"}},
 		{DisplayName: "Z", Aliases: []string{"z"}},
@@ -131,7 +93,7 @@ var (
 
 // 모드 정보 정의
 var (
-	jogModeInfos = []ModeInfo{
+	jogModeInfos = []types.ModeInfo{
 		{DisplayName: "Computer", ModeNumber: 0},
 		{DisplayName: "Joint", ModeNumber: 1},
 		{DisplayName: "World", ModeNumber: 2},
@@ -144,44 +106,42 @@ var (
 )
 
 // ============================================================================
-// 초기화 함수 (Initialization)
+// 초기화 (Initialization)
 // ============================================================================
 
 func init() {
 	// 환경변수로 로그 레벨 설정
 	switch os.Getenv("LOG_LEVEL") {
 	case "DEBUG":
-		currentLogLevel = LogLevelDebug
+		currentLogLevel = types.LogLevelDebug
 	case "VERBOSE":
-		currentLogLevel = LogLevelVerbose
+		currentLogLevel = types.LogLevelVerbose
 	default:
-		currentLogLevel = LogLevelInfo
+		currentLogLevel = types.LogLevelInfo
 	}
 }
 
-// ============================================================================
-// 로깅 유틸리티 (Logging Utilities)
 // ============================================================================
 // 로깅 유틸리티 (Logging Utilities)
 // ============================================================================
 
 // logInfo 정보 레벨 로그 출력
 func logInfo(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelInfo {
+	if currentLogLevel >= types.LogLevelInfo {
 		log.Printf("ℹ️  "+format, args...)
 	}
 }
 
 // logDebug 디버그 레벨 로그 출력
 func logDebug(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelDebug {
+	if currentLogLevel >= types.LogLevelDebug {
 		log.Printf("🔍 "+format, args...)
 	}
 }
 
 // logVerbose 상세 레벨 로그 출력
 func logVerbose(format string, args ...interface{}) {
-	if currentLogLevel >= LogLevelVerbose {
+	if currentLogLevel >= types.LogLevelVerbose {
 		log.Printf("🔧 "+format, args...)
 	}
 }
@@ -191,10 +151,10 @@ func logVerbose(format string, args ...interface{}) {
 // ============================================================================
 
 // generateAxisMap 축 맵을 동적으로 생성하는 함수
-func generateAxisMap(pidBase string, axisInfos []AxisInfo) map[string]AxisConfig {
-	axisMap := make(map[string]AxisConfig)
+func generateAxisMap(pidBase string, axisInfos []types.AxisInfo) map[string]types.AxisConfig {
+	axisMap := make(map[string]types.AxisConfig)
 	for i, info := range axisInfos {
-		config := AxisConfig{PID: pidBase, Axis: i + 1}
+		config := types.AxisConfig{PID: pidBase, Axis: i + 1}
 		for _, alias := range info.Aliases {
 			axisMap[alias] = config
 		}
@@ -203,8 +163,8 @@ func generateAxisMap(pidBase string, axisInfos []AxisInfo) map[string]AxisConfig
 }
 
 // generateModeMap 모드 맵을 동적으로 생성하는 함수
-func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
-	modeMap := make(map[string]ModeConfig)
+func generateModeMap(modeInfos []types.ModeInfo) map[string]types.ModeConfig {
+	modeMap := make(map[string]types.ModeConfig)
 	for i, info := range modeInfos {
 		var enable string
 		if i == 0 { // computer 모드만 "0"
@@ -212,7 +172,7 @@ func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
 		} else {
 			enable = "1"
 		}
-		config := ModeConfig{
+		config := types.ModeConfig{
 			Enable:  enable,
 			JogMode: fmt.Sprintf("%d", info.ModeNumber),
 		}
@@ -226,7 +186,7 @@ func generateModeMap(modeInfos []ModeInfo) map[string]ModeConfig {
 // ============================================================================
 
 // buildAxisCommand 축별 명령 생성 헬퍼 함수
-func buildAxisCommand(axisMap map[string]AxisConfig, axis string, step float64) (string, string, error) {
+func buildAxisCommand(axisMap map[string]types.AxisConfig, axis string, step float64) (string, string, error) {
 	if config, exists := axisMap[axis]; exists {
 		pidCommand := fmt.Sprintf("%s,%d,0,0", config.PID, config.Axis)
 		pvalCommand := fmt.Sprintf("%.3f", step)
@@ -236,7 +196,7 @@ func buildAxisCommand(axisMap map[string]AxisConfig, axis string, step float64) 
 }
 
 // buildJogCommand JOG 명령을 로봇 프로토콜로 변환
-func buildJogCommand(cmd JogCommand) (url.Values, error) {
+func buildJogCommand(cmd types.JogCommand) (url.Values, error) {
 	form := url.Values{}
 	form.Set("nPID", "1")
 	form.Set("Redirect", ROBOT_REDIRECT)
@@ -278,10 +238,10 @@ func buildJogCommand(cmd JogCommand) (url.Values, error) {
 // ============================================================================
 
 // sendRobotCommand 로봇에 명령 전송
-func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) {
+func sendRobotCommand(form url.Values, successMsg string) (*types.JogResponse, error) {
 	resp, err := httpClient.PostForm(ROBOT_COMMAND_URL, form)
 	if err != nil {
-		return &JogResponse{
+		return &types.JogResponse{
 			Success: false,
 			Message: "로봇 통신 실패: " + err.Error(),
 			Command: form.Encode(),
@@ -289,7 +249,7 @@ func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) 
 	}
 	defer resp.Body.Close()
 
-	response := &JogResponse{
+	response := &types.JogResponse{
 		Success: true,
 		Message: successMsg,
 		Command: form.Encode(),
@@ -301,8 +261,8 @@ func sendRobotCommand(form url.Values, successMsg string) (*JogResponse, error) 
 	return response, nil
 }
 
-// sendJogCommand JOG 명령을 로봇에 전송
-func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
+// SendJogCommand JOG 명령을 로봇에 전송 (외부 호출용)
+func SendJogCommand(cmd types.JogCommand) (*types.JogResponse, error) {
 	// 기본값 설정
 	if cmd.Mode == "" {
 		cmd.Mode = "joint"
@@ -317,7 +277,7 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 	// JOG 명령을 로봇 프로토콜로 변환
 	form, err := buildJogCommand(cmd)
 	if err != nil {
-		return &JogResponse{
+		return &types.JogResponse{
 			Success: false,
 			Message: "명령 생성 실패: " + err.Error(),
 			Command: "",
@@ -337,11 +297,11 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 	return response, nil
 }
 
-// setRobotJogMode 로봇 JOG 모드 변경
-func setRobotJogMode(mode string) (*JogResponse, error) {
+// SetRobotJogMode 로봇 JOG 모드 변경 (외부 호출용)
+func SetRobotJogMode(mode string) (*types.JogResponse, error) {
 	config, exists := jogModeConfigMap[mode]
 	if !exists {
-		return &JogResponse{
+		return &types.JogResponse{
 			Success: false,
 			Message: "지원하지 않는 모드: " + mode,
 			Command: "",
@@ -364,8 +324,8 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 	return sendRobotCommand(form, successMsg)
 }
 
-// setRobotAxis 로봇 축 선택
-func setRobotAxis(axis int, robot int) (*JogResponse, error) {
+// SetRobotAxis 로봇 축 선택 (외부 호출용)
+func SetRobotAxis(axis int, robot int) (*types.JogResponse, error) {
 	form := url.Values{}
 	form.Set("nPID", "2")
 	form.Set("Redirect", ROBOT_REDIRECT)
@@ -388,8 +348,8 @@ func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 // 데이터 파싱 및 조회 함수 (Data Parsing & Retrieval Functions)
 // ============================================================================
 
-// getRobotData 로봇의 모든 데이터 조회
-func getRobotData() (*JogState, error) {
+// GetRobotData 로봇의 모든 데이터 조회 (외부 호출용)
+func GetRobotData() (*types.JogState, error) {
 	res, err := httpClient.Get(ROBOT_DATA_URL)
 	if err != nil {
 		return nil, err
@@ -403,8 +363,6 @@ func getRobotData() (*JogState, error) {
 	}
 
 	response := strings.TrimSpace(string(body))
-	// * 디버깅용 로그 (필요시에만 활성화)
-	// log.Printf("🔍 로봇 응답 데이터: %s", response)
 
 	// 파이프(|)로 구분된 데이터 파싱
 	parts := strings.Split(response, "|")
@@ -441,7 +399,7 @@ func getRobotData() (*JogState, error) {
 	}
 
 	// 상태 정보 파싱
-	status := JogStatus{}
+	status := types.JogStatus{}
 	if len(parts) > 19 {
 		if v, err := parseFloat(parts[19]); err == nil {
 			status.AxisCount = int(v)
@@ -471,7 +429,7 @@ func getRobotData() (*JogState, error) {
 	status.SelectedAxis = 1
 	status.SelectedAxisText = getAxisText(status.JogMode, status.SelectedAxis)
 
-	return &JogState{
+	return &types.JogState{
 		Cartesian: cartesian,
 		Joint:     joint,
 		ToolData:  toolData,
@@ -479,36 +437,27 @@ func getRobotData() (*JogState, error) {
 	}, nil
 }
 
-// getRobotCoordinates 로봇 좌표 조회 (하위 호환성용)
-func getRobotCoordinates() ([]float64, error) {
-	data, err := getRobotData()
-	if err != nil {
-		return nil, err
-	}
-	return data.Joint, nil
-}
-
 // ============================================================================
 // 모니터링 함수 (Monitoring Functions)
 // ============================================================================
 
-// monitorRobotPosition 로봇 위치를 주기적으로 모니터링
-func monitorRobotPosition() {
+// MonitorRobotPosition 로봇 위치를 주기적으로 모니터링 (외부 호출용)
+func MonitorRobotPosition() {
 	ticker := time.NewTicker(1 * time.Second) // 1초마다 확인
 	defer ticker.Stop()
 
-	var prevData *JogState // 이전 상태 저장용
+	var prevData *types.JogState // 이전 상태 저장용
 
 	for range ticker.C {
-		data, err := getRobotData()
+		data, err := GetRobotData()
 		if err != nil {
 			logDebug("좌표 읽기 실패: %v", err)
 			continue
 		}
 
-		// * 데이터 변경 감지 - 이전 상태와 비교
+		// 데이터 변경 감지 - 이전 상태와 비교
 		if prevData == nil || hasDataChanged(prevData, data) {
-			// * 시간 정보와 함께 상태 출력 (변경된 경우에만)
+			// 시간 정보와 함께 상태 출력 (변경된 경우에만)
 			timestamp := time.Now().Format("15:04:05.000")
 			fmt.Printf("[%s] 🤖 JOG=(%.1f, %.1f, %.1f) | XYZ=(%.1f, %.1f, %.1f) | 모드=%s | %s\n",
 				timestamp,
@@ -529,7 +478,7 @@ func monitorRobotPosition() {
 }
 
 // hasDataChanged 두 JogState 구조체를 비교하여 변경 사항을 감지
-func hasDataChanged(prev, current *JogState) bool {
+func hasDataChanged(prev, current *types.JogState) bool {
 	// 조인트 각도 변경 확인 (0.1도 이상 차이)
 	for i := 0; i < 3 && i < len(prev.Joint) && i < len(current.Joint); i++ {
 		if abs(prev.Joint[i]-current.Joint[i]) > 0.1 {
@@ -580,11 +529,6 @@ func getSafeValue(coords []float64, index int) float64 {
 	return 0.0
 }
 
-// getCoordValue 좌표 값 조회 (하위 호환성용)
-func getCoordValue(coords []float64, index int) float64 {
-	return getSafeValue(coords, index)
-}
-
 // getJogModeText 모드 번호를 텍스트로 변환
 func getJogModeText(mode int) string {
 	// 모드 번호가 유효한 범위 내에 있는지 확인
@@ -598,7 +542,7 @@ func getJogModeText(mode int) string {
 
 // getAxisText 모드와 축 번호에 따른 축 이름 반환
 func getAxisText(jogMode int, axisNum int) string {
-	var axisInfos []AxisInfo
+	var axisInfos []types.AxisInfo
 
 	if jogMode == 1 { // Joint mode
 		axisInfos = jointAxisInfos

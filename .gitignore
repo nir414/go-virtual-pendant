@@ -1,1 +1,14 @@
-go-virtual-pendant.exe
+# 빌드 결과물
+build/
+*.exe
+__debug_bin*
+
+# 로그 파일
+*.log
+
+# IDE 설정 (개인별)
+.vscode/settings.json
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db

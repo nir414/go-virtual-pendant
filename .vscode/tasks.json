@@ -5,14 +5,16 @@
 	"tasks": [
 		{
 			// * Go 프로젝트 빌드 작업
-			// NOTE: 실행 파일을 bin/ 폴더에 생성
+			// NOTE: 실행 파일을 build/ 폴더에 생성
 			"label": "🏗️ Go Build",
 			"type": "shell",
 			"command": "go",
 			"args": [
 				"build",
 				"-v",
-				"."
+				"-o",
+				"build/go-virtual-pendant.exe",
+				"./cmd/server"
 			],
 			"group": {
 				"kind": "build",
@@ -36,7 +38,7 @@
 			"command": "go",
 			"args": [
 				"run",
-				"."
+				"./cmd/server"
 			],
 			"group": "build",
 			"presentation": {
