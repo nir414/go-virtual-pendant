@@ -4,10 +4,27 @@
     <title>Virtual Pendant - 로봇 제어</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/konva@9.2.0/konva.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Virtual Pendant - 로봇 제어 인터페이스</h1>
+        <h1>Virtual Pendant - 로봇 제어 인터페이스</h1>
+        
+        <!-- SCARA 로봇팔 시각화 영역 -->
+        <div class="robot-visualization">
+            <h2>SCARA 로봇팔 시각화</h2>
+            <div id="robot-canvas-container">
+                <div id="robot-canvas"></div>
+            </div>
+            <div class="controls-info">
+                <p><strong>🎮 조작 방법:</strong></p>
+                <ul>
+                    <li>화살표 키 또는 +/- 키: 선택된 축 조절</li>
+                    <li>숫자 키 1-6: 조인트 선택</li>
+                    <li>마우스 휠: 로봇팔 위에서 휠로 조절</li>
+                </ul>
+            </div>
+        </div>
         
         <div class="mode-selector">
             <h2>🎮 Jog Control</h2>

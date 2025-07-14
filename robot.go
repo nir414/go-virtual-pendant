@@ -101,7 +101,8 @@ func getRobotData() (*JogState, error) {
 	}
 
 	response := strings.TrimSpace(string(body))
-	log.Printf("🔍 로봇 응답 데이터: %s", response)
+	// * 디버깅용 로그 (필요시에만 활성화)
+	// log.Printf("🔍 로봇 응답 데이터: %s", response)
 
 	// 파이프(|)로 구분된 데이터 파싱
 	parts := strings.Split(response, "|")
@@ -198,44 +199,39 @@ func getRobotCoordinates() ([]float64, error) {
 
 // monitorRobotPosition periodically prints robot position
 func monitorRobotPosition() {
-	ticker := time.NewTicker(5 * time.Second) // 5초마다 확인
+	ticker := time.NewTicker(1 * time.Second) // 1초마다 확인
 	defer ticker.Stop()
+
+	var prevData *JogState // 이전 상태 저장용
 
 	for range ticker.C {
 		data, err := getRobotData()
 		if err != nil {
-			log.Printf("❌ 좌표 읽기 실패: %v", err)
+			// * 에러 로그 (시간 포함)
+			log.Printf("[%s] ❌ 좌표 읽기 실패: %v",
+				time.Now().Format("15:04:05"), err)
 			continue
 		}
 
-		// 카르테시안 좌표 출력 (X,Y,Z,Rx,Ry,Rz)
-		log.Printf("📐 카르테시안 좌표: X=%.3f, Y=%.3f, Z=%.3f, Rx=%.3f, Ry=%.3f, Rz=%.3f",
-			getSafeValue(data.Cartesian, 0), getSafeValue(data.Cartesian, 1), getSafeValue(data.Cartesian, 2),
-			getSafeValue(data.Cartesian, 3), getSafeValue(data.Cartesian, 4), getSafeValue(data.Cartesian, 5))
+		// * 데이터 변경 감지 - 이전 상태와 비교
+		if prevData == nil || hasDataChanged(prevData, data) {
+			// * 시간 정보와 함께 상태 출력 (변경된 경우에만)
+			timestamp := time.Now().Format("15:04:05.000")
+			fmt.Printf("[%s] 🤖 JOG=(%.1f°, %.1f°, %.1f°) | XYZ=(%.1f, %.1f, %.1f) | 모드=%s | %s\n",
+				timestamp,
+				getSafeValue(data.Joint, 0), getSafeValue(data.Joint, 1), getSafeValue(data.Joint, 2),
+				getSafeValue(data.Cartesian, 0), getSafeValue(data.Cartesian, 1), getSafeValue(data.Cartesian, 2),
+				data.Status.JogModeText,
+				func() string {
+					if data.Status.ErrorDesc != "" {
+						return "⚠️ " + data.Status.ErrorDesc
+					}
+					return "✅ 정상"
+				}())
 
-		// 조인트 각도 출력 (Joint1-6)
-		log.Printf("🦾 조인트 각도: J1=%.3f°, J2=%.3f°, J3=%.3f°, J4=%.3f°, J5=%.3f°, J6=%.3f°",
-			getSafeValue(data.Joint, 0), getSafeValue(data.Joint, 1), getSafeValue(data.Joint, 2),
-			getSafeValue(data.Joint, 3), getSafeValue(data.Joint, 4), getSafeValue(data.Joint, 5))
-
-		// 추가 조인트가 있는 경우 (Joint7-12)
-		if data.Status.AxisCount > 6 {
-			log.Printf("🔧 추가 조인트: J7=%.3f°, J8=%.3f°, J9=%.3f°, J10=%.3f°, J11=%.3f°, J12=%.3f°",
-				getSafeValue(data.Joint, 6), getSafeValue(data.Joint, 7), getSafeValue(data.Joint, 8),
-				getSafeValue(data.Joint, 9), getSafeValue(data.Joint, 10), getSafeValue(data.Joint, 11))
+			// 현재 상태를 이전 상태로 저장
+			prevData = data
 		}
-
-		// 툴 데이터 출력
-		log.Printf("🔨 툴 데이터: T1=%.3f, T2=%.3f, T3=%.3f, T4=%.3f, T5=%.3f, T6=%.3f",
-			getSafeValue(data.ToolData, 0), getSafeValue(data.ToolData, 1), getSafeValue(data.ToolData, 2),
-			getSafeValue(data.ToolData, 3), getSafeValue(data.ToolData, 4), getSafeValue(data.ToolData, 5))
-
-		// 상태 정보 출력
-		log.Printf("⚙️  로봇 상태: 축수=%d, 조깅=%v, 모드=%d, 전원=%d, 오류='%s'",
-			data.Status.AxisCount, data.Status.AllowJog, data.Status.JogMode,
-			data.Status.PowerState, data.Status.ErrorDesc)
-
-		log.Println("=" + strings.Repeat("=", 80))
 	}
 }
 
@@ -262,8 +258,9 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 		cmd.Step = 1.0 // 기본 스텝
 	}
 
-	log.Printf("🕹️  JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f",
-		cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
+	// * 디버깅용 로그 (명령 추적 + 시간)
+	log.Printf("[%s] 🕹️  JOG 명령 수신: 모드=%s, 축=%s, 방향=%s, 스텝=%.3f",
+		time.Now().Format("15:04:05.000"), cmd.Mode, cmd.Axis, cmd.Dir, cmd.Step)
 
 	// JOG 명령을 로봇 프로토콜로 변환
 	form, err := buildJogCommand(cmd)
@@ -294,8 +291,12 @@ func sendJogCommand(cmd JogCommand) (*JogResponse, error) {
 		Command: form.Encode(),
 	}
 
-	log.Printf("✅ JOG 명령 전송 성공: %s", response.Message)
-	log.Printf("🔗 전송된 명령: %s", response.Command)
+	// * 성공 메시지 (시간 포함)
+	fmt.Printf("[%s] ✅ JOG 명령 전송 성공: %s\n",
+		time.Now().Format("15:04:05.000"), response.Message)
+	// * 디버깅용 로그 (명령 추적 + 시간)
+	log.Printf("[%s] 🔗 전송된 명령: %s",
+		time.Now().Format("15:04:05.000"), response.Command)
 
 	return response, nil
 }
@@ -341,7 +342,9 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 		}, fmt.Errorf("unsupported mode: %s", mode)
 	}
 
-	log.Printf("🎮 JOG 모드 변경: %s", mode)
+	// * 디버깅용 로그 (모드 변경 추적 + 시간)
+	log.Printf("[%s] 🎮 JOG 모드 변경: %s",
+		time.Now().Format("15:04:05.000"), mode)
 
 	// 로봇에 명령 전송
 	resp, err := http.PostForm("http://192.168.0.1/wrtpdb", form)
@@ -360,7 +363,9 @@ func setRobotJogMode(mode string) (*JogResponse, error) {
 		Command: form.Encode(),
 	}
 
-	log.Printf("✅ JOG 모드 변경 성공: %s", response.Message)
+	// * 성공 메시지 (시간 포함)
+	fmt.Printf("[%s] ✅ JOG 모드 변경 성공: %s\n",
+		time.Now().Format("15:04:05.000"), response.Message)
 	return response, nil
 }
 
@@ -376,7 +381,9 @@ func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 	form.Set("PID2", "620,0,0,0")
 	form.Set("PVal2", fmt.Sprintf("%d", robot))
 
-	log.Printf("🎯 축 선택: 축=%d, 로봇=%d", axis, robot)
+	// * 디버깅용 로그 (축 선택 추적 + 시간)
+	log.Printf("[%s] 🎯 축 선택: 축=%d, 로봇=%d",
+		time.Now().Format("15:04:05.000"), axis, robot)
 
 	// 로봇에 명령 전송
 	resp, err := http.PostForm("http://192.168.0.1/wrtpdb", form)
@@ -395,7 +402,9 @@ func setRobotAxis(axis int, robot int) (*JogResponse, error) {
 		Command: form.Encode(),
 	}
 
-	log.Printf("✅ 축 선택 성공: %s", response.Message)
+	// * 성공 메시지 (시간 포함)
+	fmt.Printf("[%s] ✅ 축 선택 성공: %s\n",
+		time.Now().Format("15:04:05.000"), response.Message)
 	return response, nil
 }
 
@@ -454,4 +463,41 @@ func getAxisText(jogMode int, axisNum int) string {
 			return fmt.Sprintf("Axis%d", axisNum)
 		}
 	}
+}
+
+// hasDataChanged compares two JogState structs to detect changes
+func hasDataChanged(prev, current *JogState) bool {
+	// 조인트 각도 변경 확인 (0.1도 이상 차이)
+	for i := 0; i < 3 && i < len(prev.Joint) && i < len(current.Joint); i++ {
+		if abs(prev.Joint[i]-current.Joint[i]) > 0.1 {
+			return true
+		}
+	}
+
+	// 카르테시안 좌표 변경 확인 (0.1mm 이상 차이)
+	for i := 0; i < 3 && i < len(prev.Cartesian) && i < len(current.Cartesian); i++ {
+		if abs(prev.Cartesian[i]-current.Cartesian[i]) > 0.1 {
+			return true
+		}
+	}
+
+	// 모드 변경 확인
+	if prev.Status.JogMode != current.Status.JogMode {
+		return true
+	}
+
+	// 에러 상태 변경 확인
+	if prev.Status.ErrorDesc != current.Status.ErrorDesc {
+		return true
+	}
+
+	return false
+}
+
+// abs returns absolute value of float64
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
