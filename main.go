@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 )
 
 // * jogHandler handles jog command requests
@@ -117,6 +121,79 @@ func setAxisHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// checkPortConflict 포트 사용 중인 프로세스 찾기
+func checkPortConflict(port string) {
+	fmt.Printf("❌ 포트 %s가 이미 사용 중입니다!\n", port)
+	fmt.Println("🔍 포트 충돌 해결 방법:")
+
+	if runtime.GOOS == "windows" {
+		// Windows용 명령어
+		fmt.Printf("   1️⃣  포트 사용 프로세스 확인: netstat -ano | findstr :%s\n", port)
+		fmt.Println("   2️⃣  프로세스 종료: taskkill /PID <PID번호> /F")
+		fmt.Println("   3️⃣  또는 다른 포트 사용을 원한다면 코드에서 포트 번호 변경")
+
+		// 실제로 포트 사용 프로세스 찾기 시도
+		fmt.Printf("\n🔎 포트 %s 사용 중인 프로세스 자동 검색:\n", port)
+		cmd := exec.Command("netstat", "-ano")
+		output, err := cmd.Output()
+		if err == nil {
+			lines := strings.Split(string(output), "\n")
+			found := false
+			for _, line := range lines {
+				if strings.Contains(line, ":"+port) && strings.Contains(line, "LISTENING") {
+					fmt.Printf("   📍 %s\n", strings.TrimSpace(line))
+					// PID 추출
+					fields := strings.Fields(line)
+					if len(fields) >= 5 {
+						pid := fields[len(fields)-1]
+						fmt.Printf("   💡 해결 명령어: taskkill /PID %s /F\n", pid)
+					}
+					found = true
+				}
+			}
+			if !found {
+				fmt.Println("   ℹ️  포트 정보를 찾을 수 없습니다. 수동으로 확인해 주세요.")
+			}
+		}
+	} else {
+		// Linux/Mac용 명령어
+		fmt.Printf("   1️⃣  포트 사용 프로세스 확인: lsof -i :%s\n", port)
+		fmt.Println("   2️⃣  프로세스 종료: kill -9 <PID번호>")
+		fmt.Println("   3️⃣  또는 다른 포트 사용을 원한다면 코드에서 포트 번호 변경")
+
+		// 실제로 포트 사용 프로세스 찾기 시도
+		fmt.Printf("\n🔎 포트 %s 사용 중인 프로세스 자동 검색:\n", port)
+		cmd := exec.Command("lsof", "-i", ":"+port)
+		output, err := cmd.Output()
+		if err == nil && len(output) > 0 {
+			fmt.Printf("   📍 %s\n", string(output))
+		} else {
+			fmt.Println("   ℹ️  포트 정보를 찾을 수 없습니다. 수동으로 확인해 주세요.")
+		}
+	}
+
+	fmt.Println("\n⚡ 빠른 해결 방법:")
+	fmt.Println("   • VS Code 터미널에서 위 명령어를 복사해서 실행하세요")
+	fmt.Println("   • 또는 이 프로그램을 다시 실행해 보세요")
+	fmt.Println()
+}
+
+// startServerWithErrorHandling 서버 시작 및 에러 처리
+func startServerWithErrorHandling(port string) {
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		if strings.Contains(err.Error(), "bind") && strings.Contains(err.Error(), "address already in use") ||
+			strings.Contains(err.Error(), "Only one usage of each socket address") {
+			// 포트 충돌 오류
+			checkPortConflict(port)
+			os.Exit(1)
+		} else {
+			// 기타 서버 오류
+			log.Fatalf("❌ 서버 시작 실패: %v", err)
+		}
+	}
+}
+
 // * main function - server entry point
 // ! 포트 8082에서 서버 실행
 func main() {
@@ -140,6 +217,6 @@ func main() {
 	// * 로봇 위치 모니터링 고루틴 시작
 	go monitorRobotPosition()
 
-	// ! 서버 시작 - 에러 발생 시 프로그램 종료
-	log.Fatal(http.ListenAndServe(":8082", nil))
+	// ! 서버 시작 - 포트 충돌 시 자동 해결 방법 안내
+	startServerWithErrorHandling("8082")
 }

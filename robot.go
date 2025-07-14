@@ -206,7 +206,7 @@ func monitorRobotPosition() {
 		if prevData == nil || hasDataChanged(prevData, data) {
 			// * 시간 정보와 함께 상태 출력 (변경된 경우에만)
 			timestamp := time.Now().Format("15:04:05.000")
-			fmt.Printf("[%s] 🤖 JOG=(%.1f°, %.1f°, %.1f°) | XYZ=(%.1f, %.1f, %.1f) | 모드=%s | %s\n",
+			fmt.Printf("[%s] 🤖 JOG=(%.1f, %.1f, %.1f) | XYZ=(%.1f, %.1f, %.1f) | 모드=%s | %s\n",
 				timestamp,
 				getSafeValue(data.Joint, 0), getSafeValue(data.Joint, 1), getSafeValue(data.Joint, 2),
 				getSafeValue(data.Cartesian, 0), getSafeValue(data.Cartesian, 1), getSafeValue(data.Cartesian, 2),
