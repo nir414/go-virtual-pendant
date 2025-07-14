@@ -1,7 +1,11 @@
 {
+    // * VS Code 디버그 설정 파일
+    // NOTE: Go 프로젝트용 다양한 실행 모드 제공
     "version": "0.2.0",
     "configurations": [
         {
+            // * 기본 개발 모드 - 빠른 개발 및 테스트용
+            // NOTE: 일반적인 개발 작업에 가장 많이 사용
             "name": "🚀 Launch Package",
             "type": "go",
             "request": "launch",
@@ -16,6 +20,9 @@
             "logOutput": "rpc"
         },
         {
+            // * 디버깅 전용 모드 - 상세한 디버깅 정보와 함께
+            // NOTE: 복잡한 버그 추적 및 단계별 실행 시 사용
+            // ! 성능이 느릴 수 있으니 디버깅 시에만 사용
             "name": "🔧 Debug Mode",
             "type": "go",
             "request": "launch",
@@ -31,6 +38,9 @@
             "trace": "verbose"
         },
         {
+            // * 테스트 모드 - 로봇 없이 목업 데이터로 테스트
+            // NOTE: 실제 로봇 연결 없이 UI 및 기능 테스트 가능
+            // ? 로봇 하드웨어 없이도 개발 가능하도록 설계
             "name": "🧪 Test Mode",
             "type": "go",
             "request": "launch",
@@ -45,6 +55,9 @@
             "console": "integratedTerminal"
         },
         {
+            // * 프로덕션 빌드 모드 - 최적화된 실행파일로 실행
+            // NOTE: 실제 배포 환경과 유사한 조건에서 테스트
+            // ! 빌드 시간이 오래 걸릴 수 있음
             "name": "📦 Build and Run",
             "type": "go",
             "request": "launch",
@@ -57,6 +70,9 @@
             "console": "integratedTerminal"
         },
         {
+            // * 현재 파일만 실행 - 개별 파일 테스트용
+            // NOTE: 특정 기능이나 함수만 빠르게 테스트할 때 사용
+            // ? 전체 프로젝트가 아닌 단일 파일 실행
             "name": "🧩 Run Current File",
             "type": "go",
             "request": "launch",
@@ -68,6 +84,9 @@
             "console": "integratedTerminal"
         },
         {
+            // * 실행 중인 프로세스에 디버거 연결
+            // NOTE: 이미 실행 중인 서버에 디버거를 붙일 때 사용
+            // ! processId를 실행 시 설정해야 함
             "name": "📄 Attach to Process",
             "type": "go",
             "request": "attach",

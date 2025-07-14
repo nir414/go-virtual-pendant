@@ -1,7 +1,11 @@
 {
+	// * VS Code 작업 설정 파일
+	// NOTE: 빌드, 테스트, 실행 관련 자동화 작업들
 	"version": "2.0.0",
 	"tasks": [
 		{
+			// * Go 프로젝트 빌드 작업
+			// NOTE: 실행 파일을 bin/ 폴더에 생성
 			"label": "🏗️ Go Build",
 			"type": "shell",
 			"command": "go",
@@ -25,6 +29,8 @@
 			"problemMatcher": "$go"
 		},
 		{
+			// * 빠른 실행 작업 - 빌드 없이 바로 실행
+			// NOTE: 개발 중 빠른 테스트용 (go run)
 			"label": "🚀 Go Run",
 			"type": "shell",
 			"command": "go",
@@ -42,6 +48,8 @@
 			"problemMatcher": "$go"
 		},
 		{
+			// * Go 테스트 실행 작업
+			// NOTE: 프로젝트 내 모든 테스트 실행
 			"label": "🧪 Go Test",
 			"type": "shell",
 			"command": "go",
@@ -63,6 +71,8 @@
 			"problemMatcher": "$go"
 		},
 		{
+			// * Go 프로젝트 정리 작업
+			// NOTE: 빌드 캐시 및 임시 파일 삭제
 			"label": "🧹 Go Clean",
 			"type": "shell",
 			"command": "go",
@@ -77,6 +87,8 @@
 			}
 		},
 		{
+			// * Go 모듈 정리 작업
+			// NOTE: 사용하지 않는 의존성 제거 및 정리
 			"label": "📦 Go Mod Tidy",
 			"type": "shell",
 			"command": "go",
