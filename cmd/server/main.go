@@ -23,6 +23,31 @@ import (
 )
 
 // ============================================================================
+// 서버 설정 상수 (Server Configuration Constants)
+// ============================================================================
+
+const (
+	// 서버 설정
+	DEFAULT_PORT  = "8082"
+	DEFAULT_HOST  = "localhost"
+	API_BASE_PATH = "/api"
+	STATIC_PATH   = "/static/"
+
+	// API 엔드포인트
+	ENDPOINT_JOG       = "/api/jog"
+	ENDPOINT_JOG_STATE = "/api/jog/state"
+	ENDPOINT_JOG_MODE  = "/api/jog/mode"
+	ENDPOINT_JOG_AXIS  = "/api/jog/axis"
+
+	// 메시지
+	MSG_METHOD_NOT_ALLOWED = "Method Not Allowed"
+	MSG_BAD_REQUEST        = "Bad Request"
+	MSG_FETCH_STATE_FAILED = "Failed to fetch jog state"
+	MSG_SET_MODE_FAILED    = "Failed to set jog mode"
+	MSG_SET_AXIS_FAILED    = "Failed to set axis"
+)
+
+// ============================================================================
 // API 핸들러 함수들 (API Handlers)
 // ============================================================================
 
@@ -61,7 +86,7 @@ func jogHandler(w http.ResponseWriter, r *http.Request) {
 func jogStateHandler(w http.ResponseWriter, r *http.Request) {
 	data, err := robot.GetRobotData()
 	if err != nil {
-		http.Error(w, "Failed to fetch jog state", http.StatusBadGateway)
+		http.Error(w, MSG_FETCH_STATE_FAILED, http.StatusBadGateway)
 		return
 	}
 
@@ -76,9 +101,7 @@ func setJogModeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Mode string `json:"mode"` // "computer", "joint", "world", "tool", "free"
-	}
+	var req types.SetJogModeRequest
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -103,10 +126,7 @@ func setAxisHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Axis  int `json:"axis"`  // 1-6 for joints, 1-6 for cartesian
-		Robot int `json:"robot"` // robot number (usually 1)
-	}
+	var req types.SetAxisRequest
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -208,25 +228,25 @@ func startServerWithErrorHandling(port string) {
 // main 서버 진입점 - 포트 8082에서 서버 실행
 func main() {
 	// 정적 파일 서빙 (CSS, JS)
-	http.HandleFunc("/static/", web.StaticFileHandler)
+	http.HandleFunc(STATIC_PATH, web.StaticFileHandler)
 
 	// API 엔드포인트 등록
-	http.HandleFunc("/api/jog", jogHandler)
-	http.HandleFunc("/api/jog/state", jogStateHandler)
-	http.HandleFunc("/api/jog/mode", setJogModeHandler)
-	http.HandleFunc("/api/jog/axis", setAxisHandler)
+	http.HandleFunc(ENDPOINT_JOG, jogHandler)
+	http.HandleFunc(ENDPOINT_JOG_STATE, jogStateHandler)
+	http.HandleFunc(ENDPOINT_JOG_MODE, setJogModeHandler)
+	http.HandleFunc(ENDPOINT_JOG_AXIS, setAxisHandler)
 
 	// 웹 인터페이스 (템플릿 사용)
 	http.HandleFunc("/", web.InterfaceHandler)
 
 	// 서버 시작 메시지
-	fmt.Println("🚀 Virtual Pendant API running on http://localhost:8082")
-	fmt.Println("🌐 웹 인터페이스: http://localhost:8082")
+	fmt.Printf("🚀 Virtual Pendant API running on http://%s:%s\n", DEFAULT_HOST, DEFAULT_PORT)
+	fmt.Printf("🌐 웹 인터페이스: http://%s:%s\n", DEFAULT_HOST, DEFAULT_PORT)
 	fmt.Println("📍 로봇 위치 모니터링 시작 (1초마다 간격)")
 
 	// 로봇 위치 모니터링 고루틴 시작
 	go robot.MonitorRobotPosition()
 
 	// 서버 시작 - 포트 충돌 시 자동 해결 방법 안내
-	startServerWithErrorHandling("8082")
+	startServerWithErrorHandling(DEFAULT_PORT)
 }

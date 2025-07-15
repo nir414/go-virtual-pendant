@@ -544,19 +544,38 @@ function simulateJointMove(jointIndex, direction) {
 document.addEventListener('keydown', function (event) {
 	if (event.ctrlKey) return; // Ctrl 키가 눌려있으면 무시
 
+	// 텍스트 입력 필드에 포커스가 있는지 확인
+	const activeElement = document.activeElement;
+	const isInputFocused = activeElement && (
+		activeElement.tagName === 'INPUT' ||
+		activeElement.tagName === 'TEXTAREA' ||
+		activeElement.contentEditable === 'true'
+	);
+
+	// 텍스트 입력 중일 때는 숫자키 단축키 비활성화
+	if (isInputFocused && /^[0-9]$/.test(event.key)) {
+		return; // 숫자키는 텍스트 입력에 우선권 부여
+	}
+
 	const selectedAxis = getSelectedAxis();
 
 	switch (event.key) {
 		case 'ArrowLeft':
 		case '-':
-			event.preventDefault();
-			sendSelectedAxisJog('negative');
+			// 텍스트 입력 중이 아닐 때만 조깅 명령 실행
+			if (!isInputFocused) {
+				event.preventDefault();
+				sendSelectedAxisJog('negative');
+			}
 			break;
 		case 'ArrowRight':
 		case '+':
 		case '=':
-			event.preventDefault();
-			sendSelectedAxisJog('positive');
+			// 텍스트 입력 중이 아닐 때만 조깅 명령 실행
+			if (!isInputFocused) {
+				event.preventDefault();
+				sendSelectedAxisJog('positive');
+			}
 			break;
 		case '1':
 		case '2':
@@ -564,10 +583,13 @@ document.addEventListener('keydown', function (event) {
 		case '4':
 		case '5':
 		case '6':
-			event.preventDefault();
-			const jointNum = parseInt(event.key);
-			document.getElementById('axisSelect').value = 'joint' + jointNum;
-			jogListChanged();
+			// 텍스트 입력 중이 아닐 때만 조인트 선택 실행
+			if (!isInputFocused) {
+				event.preventDefault();
+				const jointNum = parseInt(event.key);
+				document.getElementById('axisSelect').value = 'joint' + jointNum;
+				jogListChanged();
+			}
 			break;
 	}
 });
