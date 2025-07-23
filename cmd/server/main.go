@@ -144,6 +144,22 @@ func setAxisHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// clientLogHandler 브라우저 클라이언트 로그 수신 및 터미널 출력
+func clientLogHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, MSG_METHOD_NOT_ALLOWED, http.StatusMethodNotAllowed)
+		return
+	}
+	var msg interface{}
+	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+		fmt.Println(">>> [CLIENT LOG] decode error:", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	fmt.Println(">>> [CLIENT LOG]", msg)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ============================================================================
 // 서버 관리 함수들 (Server Management)
 // ============================================================================
@@ -235,6 +251,7 @@ func main() {
 	http.HandleFunc(ENDPOINT_JOG_STATE, jogStateHandler)
 	http.HandleFunc(ENDPOINT_JOG_MODE, setJogModeHandler)
 	http.HandleFunc(ENDPOINT_JOG_AXIS, setAxisHandler)
+	http.HandleFunc("/client-log", clientLogHandler)
 
 	// 웹 인터페이스 (템플릿 사용)
 	http.HandleFunc("/", web.InterfaceHandler)

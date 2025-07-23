@@ -15,7 +15,7 @@ let joint4Angle = 0;    // * 엔드 이펙터 회전
 const SCARA_PARAMS = {
 	link1Length: 100,        // * 첫 번째 링크 길이
 	link2Length: 100,        // * 두 번째 링크 길이
-	link3Length: 100,        // * 두 번째 링크 길이
+	link3Length: 100,        // * 세 번째 링크 길이
 	baseRadius: 20,          // * 베이스 반지름
 	jointRadius: 8,          // * 조인트 반지름
 	endEffectorSize: 15,     // * 엔드 이펙터 크기
@@ -238,14 +238,14 @@ function updateRobotInfo(endX, endY) {
 
 	// * 조인트 각도 및 위치 정보 표시
 	infoDiv.innerHTML = `
-        <div class="joint-info">J1: ${(joint1Angle * 180 / Math.PI).toFixed(1)}°</div>
-        <div class="joint-info">J2: ${(joint2Angle * 180 / Math.PI).toFixed(1)}°</div>
-        <div class="joint-info">Z: ${joint3Position.toFixed(1)}mm</div>
-        <div class="joint-info">R: ${(joint4Angle * 180 / Math.PI).toFixed(1)}°</div>
-        <br>
-        <div class="joint-info">X: ${actualX.toFixed(1)}mm</div>
-        <div class="joint-info">Y: ${actualY.toFixed(1)}mm</div>
-    `;
+		<div class="joint-info">J1: ${(joint1Angle * 180 / Math.PI).toFixed(1)}°</div>
+		<div class="joint-info">J2: ${(joint2Angle * 180 / Math.PI).toFixed(1)}°</div>
+		<div class="joint-info">Z: ${joint3Position.toFixed(1)}mm</div>
+		<div class="joint-info">R: ${(joint4Angle * 180 / Math.PI).toFixed(1)}°</div>
+		<br>
+		<div class="joint-info">X: ${actualX.toFixed(1)}mm</div>
+		<div class="joint-info">Y: ${actualY.toFixed(1)}mm</div>
+	`;
 }
 
 // * 조인트 각도 업데이트 - 서버에서 받은 데이터로 로봇팔 업데이트
@@ -263,39 +263,19 @@ function updateJointAngles(jointValues) {
 	}
 }
 
-// 페이지 로드 시 로봇 시각화 초기화
-document.addEventListener('DOMContentLoaded', function () {
-	// * 로봇 시각화 초기화
-	initRobotVisualization();
 
-	// * 초기 UI 설정
-	updateAxisOptions();
-
-	// * 페이지 로드 시 위치 정보 업데이트
-	updatePosition();
-
-	// * 125ms마다 자동 업데이트 (고속 실시간 모니터링)
-	setInterval(updatePosition, 125);
-});
-
+// Get current jog mode from select
 function getSelectedMode() {
-	return currentJogMode;
+	return document.getElementById('modeSelect').value;
 }
 
+// Handle mode change from select
 function setJogModeButton(mode) {
-	// 모든 버튼에서 active 클래스 제거
-	document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-
-	// 선택된 버튼에 active 클래스 추가
-	document.getElementById('btn-' + mode).classList.add('active');
-
-	// 현재 모드 업데이트
+	// Update current mode
 	currentJogMode = mode;
-
-	// 로봇에 모드 변경 전송
+	// Send mode change to robot
 	setJogMode(mode);
-
-	// UI 업데이트
+	// Update axis options
 	updateAxisOptions();
 }
 
@@ -321,7 +301,7 @@ function updateAxisOptions() {
 			'<option value="rz">Rz rotation</option>';
 	}
 
-	// 선택된 축 표시 업데이트 및 로봇에 전송
+	// Send initial axis selection after updating options
 	jogListChanged();
 }
 
@@ -343,7 +323,8 @@ function getSelectedAxis() {
 
 function jogListChanged() {
 	const selectedAxis = getSelectedAxis();
-	const selectedAxisSpan = document.getElementById('selectedAxis');
+	// Remove deprecated selectedAxisSpan update
+	// const selectedAxisSpan = document.getElementById('selectedAxis');
 	const mode = getSelectedMode();
 
 	// 선택된 축 이름 표시 업데이트
@@ -354,7 +335,7 @@ function jogListChanged() {
 		'rx': 'Rx 회전', 'ry': 'Ry 회전', 'rz': 'Rz 회전'
 	};
 
-	selectedAxisSpan.textContent = axisNames[selectedAxis] || selectedAxis;
+	// No UI update here; position panel shows current-axis
 
 	// 축 번호 계산
 	let axisNumber = 1;
@@ -423,18 +404,46 @@ function sendSelectedAxisJog(direction) {
 }
 
 function sendJog(axis, direction) {
+	const currentTime = performance.now();
+	const timeSinceLastJog = lastJogTime > 0 ? currentTime - lastJogTime : 0;
+	lastJogTime = currentTime;
+	jogCommandCount++;
+
 	const mode = getSelectedMode();
 	const step = parseFloat(document.getElementById('stepSize').value);
 
+	// Validate step size
+	const stepInput = parseFloat(document.getElementById('stepSize').value);
+	if (isNaN(stepInput) || stepInput < 0.1 || stepInput > 10) {
+		document.getElementById('status').textContent = '❌ 잘못된 스텝 크기: ' + stepInput;
+		document.getElementById('status').style.background = '#f8d7da';
+		return;
+	}
 	const command = {
 		axis: axis,
 		dir: direction,
-		step: step,
+		step: stepInput,
 		mode: mode
 	};
 
-	document.getElementById('status').textContent = '명령 전송 중... (' + mode + ' 모드, ' + axis + ', ' + direction + ')';
+	// 디버깅: 상세한 명령 전송 로그
+	console.log('📡 JOG 명령 전송:', {
+		command: command,
+		timestamp: new Date().toLocaleTimeString() + '.' + (currentTime % 1000).toFixed(0).padStart(3, '0'),
+		intervalSinceLastJog: timeSinceLastJog.toFixed(1) + 'ms',
+		commandNumber: jogCommandCount,
+		isJogging: isJogging
+	});
 
+	// 상태 표시는 연속 조깅 중에는 스킵 (성능 향상)
+	if (!isJogging) {
+		document.getElementById('status').textContent = '명령 전송 중... (' + mode + ' 모드, ' + axis + ', ' + direction + ')';
+	}
+
+	// 서버 응답 시간 측정
+	const fetchStartTime = performance.now();
+
+	// 서버 응답을 기다리지 않고 즉시 전송 (Fire and Forget 방식)
 	fetch('/api/jog', {
 		method: 'POST',
 		headers: {
@@ -442,20 +451,48 @@ function sendJog(axis, direction) {
 		},
 		body: JSON.stringify(command)
 	})
-		.then(response => response.json())
-		.then(data => {
-			if (data.success) {
-				document.getElementById('status').textContent = '✅ ' + data.message;
-				document.getElementById('status').style.background = '#d4edda';
-			} else {
-				document.getElementById('status').textContent = '❌ ' + data.message;
-				document.getElementById('status').style.background = '#f8d7da';
+		.then(response => {
+			if (!response.ok) {
+				throw new Error('HTTP ' + response.status + ' ' + response.statusText);
 			}
-			setTimeout(updatePosition, 125); // 8fps = 1/8*1000 = 125ms 위치 업데이트
+			return response.json();
+		})
+		.then(data => {
+			const responseTime = performance.now() - fetchStartTime;
+
+			console.log('✅ JOG 응답:', {
+				response: data,
+				responseTime: responseTime.toFixed(1) + 'ms',
+				commandNumber: jogCommandCount,
+				timestamp: new Date().toLocaleTimeString() + '.' + (performance.now() % 1000).toFixed(0).padStart(3, '0')
+			});
+
+			// 연속 조깅 중이 아닐 때만 상태 업데이트
+			if (!isJogging) {
+				if (data.success) {
+					document.getElementById('status').textContent = '✅ ' + data.message;
+					document.getElementById('status').style.background = '#d4edda';
+				} else {
+					document.getElementById('status').textContent = '❌ ' + data.message;
+					document.getElementById('status').style.background = '#f8d7da';
+				}
+			}
 		})
 		.catch(error => {
-			document.getElementById('status').textContent = '❌ 통신 오류: ' + error;
-			document.getElementById('status').style.background = '#f8d7da';
+			const responseTime = performance.now() - fetchStartTime;
+
+			console.error('❌ JOG 통신 오류:', {
+				error: error,
+				responseTime: responseTime.toFixed(1) + 'ms',
+				commandNumber: jogCommandCount,
+				timestamp: new Date().toLocaleTimeString() + '.' + (performance.now() % 1000).toFixed(0).padStart(3, '0')
+			});
+
+			// 연속 조깅 중이 아닐 때만 에러 표시
+			if (!isJogging) {
+				document.getElementById('status').textContent = '❌ 통신 오류: ' + error;
+				document.getElementById('status').style.background = '#f8d7da';
+			}
 		});
 }
 
@@ -465,10 +502,14 @@ function updatePosition() {
 		.then(data => {
 			// 위치 정보 업데이트
 			let coordsText = '';
-			coordsText += '🦾 조인트: ' + data.joint.map((v, i) => 'J' + (i + 1) + '=' + v.toFixed(3) + '°').join(', ') + '\n';
-			coordsText += '📐 카르테시안: X=' + data.cartesian[0].toFixed(3) + ', Y=' + data.cartesian[1].toFixed(3) + ', Z=' + data.cartesian[2].toFixed(3) + '\n';
-			coordsText += '🔄 회전: Rx=' + data.cartesian[3].toFixed(3) + '°, Ry=' + data.cartesian[4].toFixed(3) + '°, Rz=' + data.cartesian[5].toFixed(3) + '°\n';
-			coordsText += '⚙️  상태: 축수=' + data.status.axis_count + ', 조깅=' + data.status.allow_jog + ', 모드=' + data.status.jog_mode;
+			// Extract properties from JSON response
+			const joints = data.joint;
+			const carts = data.cartesian;
+			coordsText += '🦾 조인트: ' + joints.map((v, i) => 'J' + (i + 1) + '=' + v.toFixed(3) + '°').join(', ') + '\n';
+			coordsText += '📐 카르테시안: X=' + carts[0].toFixed(3) + ', Y=' + carts[1].toFixed(3) + ', Z=' + carts[2].toFixed(3) + '\n';
+			coordsText += '🔄 회전: Rx=' + carts[3].toFixed(3) + '°, Ry=' + carts[4].toFixed(3) + '°, Rz=' + carts[5].toFixed(3) + '°\n';
+			const stat = data.status;
+			coordsText += '⚙️  상태: 축수=' + stat.axis_count + ', 조깅=' + stat.allow_jog + ', 모드=' + stat.jog_mode;
 
 			document.getElementById('coordinates').textContent = coordsText;
 
@@ -511,36 +552,166 @@ function updatePosition() {
 			}
 		})
 		.catch(error => {
+			console.error('위치 정보 업데이트 실패:', error);
 			document.getElementById('coordinates').textContent = '❌ 위치 정보 로딩 실패: ' + error;
 			document.getElementById('current-jog-mode').textContent = '연결 오류';
 			document.getElementById('current-axis').textContent = '연결 오류';
 		});
 }
 
-// 데모용 조인트 제어 함수들 (실제 로봇 연결 없이 시각화 테스트용)
-function simulateJointMove(jointIndex, direction) {
-	const step = parseFloat(document.getElementById('stepSize').value);
-	const stepRad = step * Math.PI / 180;
+// 🔍 네트워크 신호 캡처용 Fetch 인터셉터 추가
+(function () {
+	const originalFetch = window.fetch;
+	window.fetch = async function (input, init) {
+		console.log('[Intercepted Request]', input, init);
+		const startTime = performance.now();
+		try {
+			const response = await originalFetch(input, init);
+			const elapsed = (performance.now() - startTime).toFixed(1);
+			let cloned = response.clone();
+			let payload;
+			try {
+				payload = await cloned.json();
+			} catch (_) {
+				payload = await cloned.text();
+			}
+			console.log('[Intercepted Response]', input, payload, `(${elapsed}ms)`);
+			return response;
+		} catch (error) {
+			console.error('[Fetch Error]', input, error);
+			throw error;
+		}
+	};
+})();
 
-	switch (jointIndex) {
-		case 1:
-			joint1Angle += direction * stepRad;
-			break;
-		case 2:
-			joint2Angle += direction * stepRad;
-			break;
-		case 3:
-			joint3Position += direction * step;
-			break;
-		case 4:
-			joint4Angle += direction * stepRad;
-			break;
+// * 연속 조깅을 위한 변수들
+let continuousJogInterval = null;
+let isJogging = false;
+let keyBusy = false;  // 키 중복 방지를 위한 플래그 (원본 방식)
+
+// 성능 측정 변수들
+let jogStartTime = 0;
+let jogCommandCount = 0;
+let lastJogTime = 0;
+
+// * 연속 조깅 시작 함수 - 원본 방식 개선
+function startContinuousJog(direction) {
+	const currentTime = performance.now();
+	jogStartTime = currentTime;
+	jogCommandCount = 0;
+
+	console.log('🚀 연속 조깅 시작:', {
+		direction: direction,
+		startTime: new Date().toLocaleTimeString() + '.' + (currentTime % 1000).toFixed(0).padStart(3, '0'),
+		timestamp: currentTime
+	});
+
+	// 이미 조깅 중이면 먼저 중단
+	if (isJogging) {
+		console.log('⚠️  이미 조깅 중 - 기존 조깅 중단');
+		stopContinuousJog();
 	}
 
-	updateRobotVisualization();
+	isJogging = true;
+
+	// 즉시 첫 번째 조깅 실행 (딜레이 없이)
+	sendSelectedAxisJog(direction);
+
+	// 연속 조깅을 위한 인터벌 시작 (30ms 간격으로 더 빠른 반응)
+	continuousJogInterval = setInterval(() => {
+		if (isJogging) {
+			sendSelectedAxisJog(direction);
+		}
+	}, 30);
+
+	console.log('⏱️  연속 조깅 인터벌 시작 (30ms)');
 }
 
-// 키보드 단축키 지원
+// * 연속 조깅 중단 함수 - 원본 방식 개선
+function stopContinuousJog() {
+	const currentTime = performance.now();
+	const duration = currentTime - jogStartTime;
+	const avgInterval = jogCommandCount > 0 ? duration / jogCommandCount : 0;
+
+	console.log('🛑 연속 조깅 중단:', {
+		duration: duration.toFixed(1) + 'ms',
+		commandCount: jogCommandCount,
+		avgInterval: avgInterval.toFixed(1) + 'ms',
+		expectedInterval: '30ms',
+		performance: (avgInterval / 30 * 100).toFixed(1) + '%'
+	});
+
+	isJogging = false;
+	keyBusy = false;  // 키 잠금 해제
+
+	if (continuousJogInterval) {
+		clearInterval(continuousJogInterval);
+		continuousJogInterval = null;
+		console.log('⏹️  연속 조깅 인터벌 정리 완료');
+	}
+
+	// 조깅 중단 명령을 서버에 전송 (원본 방식과 유사)
+	sendJogStop();
+
+	// 연속 조깅이 끝났을 때 상태 업데이트
+	document.getElementById('status').textContent = '대기 중...';
+	document.getElementById('status').style.background = '';
+}
+
+// * 조깅 중단 명령 전송 함수 (원본의 jog(0) 방식)
+function sendJogStop() {
+	const currentTime = performance.now();
+	const mode = getSelectedMode();
+	const axis = getSelectedAxis();
+
+	const stopCommand = {
+		axis: axis,
+		dir: 'stop',      // 중단 신호
+		step: 0,          // 스텝 0
+		mode: mode
+	};
+
+	console.log('🛑 조깅 중단 명령 전송:', {
+		command: stopCommand,
+		timestamp: new Date().toLocaleTimeString() + '.' + (currentTime % 1000).toFixed(0).padStart(3, '0'),
+		totalJogDuration: (currentTime - jogStartTime).toFixed(1) + 'ms'
+	});
+
+	const fetchStartTime = performance.now();
+
+	// 중단 명령은 즉시 전송 (우선순위 높음)
+	fetch('/api/jog', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify(stopCommand)
+	})
+		.then(response => response.json())
+		.then(data => {
+			const responseTime = performance.now() - fetchStartTime;
+
+			console.log('✅ 조깅 중단 응답:', {
+				response: data,
+				responseTime: responseTime.toFixed(1) + 'ms',
+				timestamp: new Date().toLocaleTimeString() + '.' + (performance.now() % 1000).toFixed(0).padStart(3, '0')
+			});
+		})
+		.catch(error => {
+			const responseTime = performance.now() - fetchStartTime;
+
+			console.error('❌ 조깅 중단 명령 오류:', {
+				error: error,
+				responseTime: responseTime.toFixed(1) + 'ms',
+				timestamp: new Date().toLocaleTimeString() + '.' + (performance.now() % 1000).toFixed(0).padStart(3, '0')
+			});
+		});
+}
+
+// ...existing code...
+// (함수 simulateJointMove 등 나머지 함수 및 이벤트 핸들러 포함)
+
+// 키보드 단축키 지원 - 원본 방식 개선
 document.addEventListener('keydown', function (event) {
 	if (event.ctrlKey) return; // Ctrl 키가 눌려있으면 무시
 
@@ -557,24 +728,24 @@ document.addEventListener('keydown', function (event) {
 		return; // 숫자키는 텍스트 입력에 우선권 부여
 	}
 
-	const selectedAxis = getSelectedAxis();
-
 	switch (event.key) {
 		case 'ArrowLeft':
 		case '-':
 			// 텍스트 입력 중이 아닐 때만 조깅 명령 실행
-			if (!isInputFocused) {
+			if (!isInputFocused && keyBusy === false) {
+				keyBusy = true;  // 키 잠금 (원본 방식)
 				event.preventDefault();
-				sendSelectedAxisJog('negative');
+				startContinuousJog('negative');
 			}
 			break;
 		case 'ArrowRight':
 		case '+':
 		case '=':
 			// 텍스트 입력 중이 아닐 때만 조깅 명령 실행
-			if (!isInputFocused) {
+			if (!isInputFocused && keyBusy === false) {
+				keyBusy = true;  // 키 잠금 (원본 방식)
 				event.preventDefault();
-				sendSelectedAxisJog('positive');
+				startContinuousJog('positive');
 			}
 			break;
 		case '1':
@@ -594,10 +765,36 @@ document.addEventListener('keydown', function (event) {
 	}
 });
 
-// 마우스 휠을 이용한 조인트 제어
+// 키보드 키를 뗄 때 연속 조깅 중단 - 원본 방식
+document.addEventListener('keyup', function (event) {
+	switch (event.key) {
+		case 'ArrowLeft':
+		case '-':
+		case 'ArrowRight':
+		case '+':
+		case '=':
+			stopContinuousJog();  // 즉시 중단
+			break;
+	}
+});
+
+// 마우스 휠을 이용한 조인트 제어 - 연속 조깅으로 변경
+let wheelTimeout = null;
 document.getElementById('robot-canvas').addEventListener('wheel', function (event) {
 	event.preventDefault();
 
 	const direction = event.deltaY > 0 ? 'negative' : 'positive';
-	sendSelectedAxisJog(direction);
+
+	// 기존 휠 타이머 제거
+	if (wheelTimeout) {
+		clearTimeout(wheelTimeout);
+	}
+
+	// 짧은 연속 조깅 시작
+	startContinuousJog(direction);
+
+	// 짧은 시간 후 자동으로 중단 (150ms로 단축)
+	wheelTimeout = setTimeout(() => {
+		stopContinuousJog();
+	}, 150);
 });

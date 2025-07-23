@@ -198,8 +198,18 @@ func buildAxisCommand(axisMap map[string]types.AxisConfig, axis string, step flo
 // buildJogCommand JOG 명령을 로봇 프로토콜로 변환
 func buildJogCommand(cmd types.JogCommand) (url.Values, error) {
 	form := url.Values{}
-	form.Set("nPID", "1")
+	// Send two PIDs: movement command (PID1) and jog start trigger (PID2)
+	form.Set("nPID", "2")
 	form.Set("Redirect", ROBOT_REDIRECT)
+
+	// 조깅 중단 명령 처리 (원본 jogright.asp의 jog(0) 방식)
+	if cmd.Dir == "stop" {
+		// 조깅 중단은 PID 값 0으로 전송
+		form.Set("PID1", "0,0,0,0")
+		form.Set("PVal1", "0")
+		logInfo("조깅 중단 명령 전송")
+		return form, nil
+	}
 
 	// 방향에 따른 부호 결정
 	direction := 1.0
@@ -227,8 +237,12 @@ func buildJogCommand(cmd types.JogCommand) (url.Values, error) {
 		return nil, fmt.Errorf("지원하지 않는 모드: %s", cmd.Mode)
 	}
 
+	// Movement command: PID1 = speed/axis command
 	form.Set("PID1", pidCommand)
 	form.Set("PVal1", pvalCommand)
+	// Jog heartbeat trigger: always PID2=CartesianModePID with trigger value 1
+	form.Set("PID2", fmt.Sprintf("%s,1,0,0", CartesianModePID))
+	form.Set("PVal2", "1")
 
 	return form, nil
 }
@@ -263,6 +277,30 @@ func sendRobotCommand(form url.Values, successMsg string) (*types.JogResponse, e
 
 // SendJogCommand JOG 명령을 로봇에 전송 (외부 호출용)
 func SendJogCommand(cmd types.JogCommand) (*types.JogResponse, error) {
+	// 조깅 중단 명령 처리
+	if cmd.Dir == "stop" {
+		logInfo("JOG 중단 명령 수신")
+
+		// 중단 명령을 로봇 프로토콜로 변환
+		form, err := buildJogCommand(cmd)
+		if err != nil {
+			return &types.JogResponse{
+				Success: false,
+				Message: "중단 명령 생성 실패: " + err.Error(),
+				Command: "",
+			}, err
+		}
+
+		// 로봇에 중단 명령 전송
+		response, err := sendRobotCommand(form, "JOG 중단 명령 전송 완료")
+		if err != nil {
+			return response, err
+		}
+
+		logDebug("전송된 중단 명령: %s", response.Command)
+		return response, nil
+	}
+
 	// 기본값 설정
 	if cmd.Mode == "" {
 		cmd.Mode = "joint"

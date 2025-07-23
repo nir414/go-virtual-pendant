@@ -12,3 +12,7 @@ __debug_bin*
 # OS 생성 파일
 .DS_Store
 Thumbs.db
+.github/instructions/
+
+# 참조용 웹 파일 모음 (수정하지 말고 읽기 전용)
+reference-web/
